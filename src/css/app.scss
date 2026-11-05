@@ -1,0 +1,418 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+// app global css in SCSS form
+@import 'maia.scss';
+
+/* ==========================================================================
+   Theme tokens (configurable palette; defaults = Vino Maia)
+   ========================================================================== */
+:root {
+    @each $key, $color in $maia-palette-defaults {
+        --maia-#{$key}: #{$color};
+        --maia-#{$key}-rgb: #{red($color)}, #{green($color)}, #{blue($color)};
+    }
+
+    --app-wine-on-dark: var(--maia-wine-on-dark);
+    --app-wine-on-dark-rgb: var(--maia-wine-on-dark-rgb);
+}
+
+body:not(.body--dark) {
+    --app-surface: #{$maia-ivory};
+    --app-surface-2: #{$maia-ivory-2};
+    --app-card-bg: #ffffff;
+    --app-text: #2b1d1f;
+    --app-text-muted: #7b6a62;
+    --app-gold-line: #{brand-a(gold, 0.28)};
+    --app-gold-soft: #{brand-a(gold, 0.12)};
+    --app-header-bg: linear-gradient(100deg, #{$maia-wine-deep} 0%, #{$maia-wine} 48%, #{$maia-wine-light} 78%, #{rgba($maia-orange, 0.55)} 100%);
+    --app-spectrum: linear-gradient(90deg, #{$maia-violet}, #{$maia-blue}, #{$maia-teal}, #{$maia-emerald}, #{$maia-yellow}, #{$maia-orange}, #{$maia-flame});
+    --notification-bg: #ffffff;
+    --notification-hover-bg: color-mix(in srgb, var(--maia-ivory) 60%, #ffffff);
+    --notification-border: #{brand-a(gold, 0.25)};
+    --panel-footer-border: #{brand-a(gold, 0.2)};
+    --empty-icon-bg: #{brand-a(wine, 0.08)};
+    --table-head-bg: #{$maia-ivory-2};
+    --table-head-text: #{$maia-wine};
+    --table-row-hover: #{brand-a(gold, 0.08)};
+}
+
+body.body--dark {
+    --app-surface: var(--q-dark-page);
+    --app-surface-2: var(--q-dark);
+    --app-card-bg: var(--q-dark);
+    --app-text: #f1e8dc;
+    --app-text-muted: #b3a597;
+    --app-gold-line: #{brand-a(gold-light, 0.22)};
+    --app-gold-soft: #{brand-a(gold-light, 0.08)};
+    --app-header-bg: linear-gradient(100deg, var(--maia-header-dark-1) 0%, var(--maia-wine-deep) 55%, var(--maia-header-dark-3) 82%, #{rgba($maia-violet, 0.45)} 100%);
+    --app-spectrum: linear-gradient(90deg, #{$maia-violet}, #{$maia-blue}, #{$maia-teal}, #{$maia-emerald}, #{$maia-yellow}, #{$maia-orange}, #{$maia-flame});
+    --notification-bg: var(--q-dark);
+    --notification-hover-bg: rgba(255, 255, 255, 0.05);
+    --notification-border: #{brand-a(gold-light, 0.16)};
+    --panel-footer-border: #{brand-a(gold-light, 0.14)};
+    --empty-icon-bg: rgba(255, 255, 255, 0.06);
+    --table-head-bg: color-mix(in srgb, var(--maia-dark) 90%, var(--maia-wine-light));
+    --table-head-text: #{$maia-gold-light};
+    --table-row-hover: #{brand-a(gold-light, 0.06)};
+    background-color: var(--app-surface);
+}
+
+/* Sidebar is wine-ink in both modes */
+body {
+    --app-sidebar-bg: linear-gradient(180deg, #{$maia-ink} 0%, #{$maia-ink-2} 100%);
+    --app-sidebar-text: #f1e6d6;
+    --app-sidebar-muted: #{brand-a(gold-light, 0.75)};
+    --app-sidebar-hover: #{brand-a(gold-light, 0.09)};
+    --app-sidebar-active: linear-gradient(90deg, #{brand-a(wine-light, 0.95)} 0%, #{brand-a(wine, 0.25)} 100%);
+    font-family: $maia-sans;
+    color: var(--app-text);
+}
+
+/* ==========================================================================
+   Layout surfaces
+   ========================================================================== */
+#mainLayout {
+    background-color: var(--app-surface);
+}
+
+body.body--dark,
+body.body--dark #mainLayout,
+body.body--dark .q-layout,
+body.body--dark .q-page-container,
+body.body--dark .q-page,
+body.body--dark .right-drawer,
+body.body--dark .right-drawer .q-drawer__content,
+body.body--dark .right-panel-surface {
+    background-color: var(--app-surface) !important;
+}
+
+body.body--dark .q-layout__shadow {
+    display: none !important;
+}
+
+#mainLayout .main-drawer.q-drawer--bordered {
+    border-right: 1px solid #{brand-a(gold, 0.25)};
+}
+
+#mainLayout .right-drawer.q-drawer--bordered {
+    border-left: 1px solid var(--app-gold-line);
+}
+
+.app-header {
+    background: var(--app-header-bg) !important;
+    color: #f7efe3;
+    border-bottom: none;
+    box-shadow: 0 6px 24px rgba(var(--maia-wine-deep-rgb), 0.25);
+}
+
+.app-header .q-btn,
+.app-header .q-toolbar__title {
+    color: #f7efe3;
+}
+
+/* ==========================================================================
+   Typography
+   ========================================================================== */
+.font-serif,
+.text-h4,
+.text-h5,
+.text-h6 {
+    font-family: $maia-serif;
+    letter-spacing: 0.01em;
+}
+
+.text-h6 {
+    font-weight: 600;
+}
+
+/* ==========================================================================
+   Quasar component refinements
+   ========================================================================== */
+.q-btn {
+    border-radius: 10px;
+    letter-spacing: 0.02em;
+}
+
+.q-btn.q-btn--round {
+    border-radius: 50%;
+}
+
+.q-btn--unelevated.bg-primary,
+.q-btn--standard.bg-primary {
+    background: linear-gradient(135deg, #{$maia-wine-light} 0%, #{$maia-wine} 55%, #{$maia-wine-deep} 100%) !important;
+    box-shadow: 0 4px 14px rgba(var(--maia-wine-rgb), 0.25), inset 0 1px 0 rgba(var(--maia-gold-pale-rgb), 0.25);
+    transition: box-shadow 0.2s ease, transform 0.2s ease;
+
+    &:hover {
+        box-shadow: 0 6px 20px rgba(var(--maia-wine-rgb), 0.32), 0 0 0 1px #{brand-a(gold-light, 0.55)};
+        transform: translateY(-1px);
+    }
+}
+
+.q-btn--outline.text-primary::before {
+    border-color: #{brand-a(wine, 0.45)};
+}
+
+.q-field--outlined .q-field__control {
+    border-radius: 10px;
+}
+
+.q-field--outlined .q-field__control::before {
+    border-color: #{brand-a(gold, 0.35)};
+}
+
+.q-field--outlined.q-field--highlighted .q-field__control::after {
+    border-color: $maia-gold;
+    border-width: 2px;
+}
+
+body.body--dark .q-field--outlined .q-field__control::before {
+    border-color: #{brand-a(gold-light, 0.25)};
+}
+
+.q-tooltip.dbh-user-tooltip {
+    background: $maia-ink;
+    border: 1px solid #{brand-a(gold-light, 0.35)};
+    padding: 6px 10px;
+    white-space: nowrap;
+    max-width: none;
+    line-height: 1.3;
+}
+
+.dbh-user-tooltip-name {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #fff;
+}
+
+.dbh-user-tooltip-sub {
+    font-size: 11px;
+    color: $maia-gold-light;
+}
+
+/* Wine text has too little contrast on dark surfaces: lift it to a wine rose */
+body.body--dark {
+    color-scheme: dark;
+
+    .text-primary {
+        color: var(--app-wine-on-dark) !important;
+    }
+
+    .q-btn--outline.text-primary::before,
+    .q-chip--outline.text-primary {
+        border-color: #{rgba(var(--app-wine-on-dark-rgb), 0.45)};
+    }
+
+    .q-btn--outline.text-primary:not(.disabled):hover::before {
+        border-color: #{brand-a(gold-light, 0.7)};
+    }
+
+    .q-chip.bg-primary,
+    .q-btn--unelevated.bg-primary,
+    .q-btn--standard.bg-primary {
+        color: #fff !important;
+    }
+
+    .q-field__native,
+    .q-field__input {
+        color: var(--app-text);
+    }
+
+    .q-field__suffix,
+    .q-field__prefix {
+        color: var(--app-text-muted);
+    }
+
+    .q-field input::placeholder {
+        color: #{rgba(#f1e8dc, 0.45)};
+    }
+
+    .q-btn.disabled {
+        opacity: 0.45 !important;
+    }
+}
+
+.q-field--focused .q-field__label {
+    color: $maia-gold !important;
+}
+
+.q-dialog__backdrop {
+    backdrop-filter: blur(4px) saturate(130%);
+    background: rgba(var(--maia-ink-rgb), 0.45);
+}
+
+.q-dialog .q-card {
+    border-radius: 16px;
+    border-top: 3px solid $maia-gold;
+}
+
+.q-dialog .q-card > .q-form > .q-card-section:first-child.text-h6,
+.q-dialog .q-card > .q-card-section:first-child.text-h6 {
+    color: $maia-wine;
+}
+
+body.body--dark .q-dialog .q-card > .q-form > .q-card-section:first-child.text-h6,
+body.body--dark .q-dialog .q-card > .q-card-section:first-child.text-h6 {
+    color: $maia-gold-light;
+}
+
+.q-menu {
+    border-radius: 12px;
+    border: 1px solid var(--app-gold-line);
+    box-shadow: 0 16px 40px rgba(var(--maia-ink-rgb), 0.18);
+}
+
+.q-tab {
+    letter-spacing: 0.03em;
+}
+
+.q-tabs .q-tab--active {
+    color: $maia-wine;
+}
+
+body.body--dark .q-tabs .q-tab--active {
+    color: $maia-gold-light;
+}
+
+.q-tab__indicator {
+    background: linear-gradient(90deg, #{$maia-gold} 0%, #{$maia-gold-light} 100%) !important;
+    height: 3px;
+    border-radius: 3px 3px 0 0;
+}
+
+.q-badge {
+    border-radius: 6px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+.q-chip {
+    border-radius: 999px;
+}
+
+.q-banner.maia-card {
+    border-left: 4px solid $maia-gold;
+}
+
+.q-notification {
+    border-radius: 12px;
+}
+
+::selection {
+    background: #{brand-a(gold-light, 0.45)};
+}
+
+/* ==========================================================================
+   Legacy template utilities (kept for the template pages, recolored)
+   ========================================================================== */
+.ll {
+    margin-top: 0.6rem;
+    margin-left: 1rem;
+}
+.h {
+    justify-content: space-between;
+}
+.iq {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding: 0.5rem;
+}
+.iq span,
+.iq i {
+    color: white;
+}
+.cortarColumna {
+    overflow: hidden;
+    max-width: 150px;
+    white-space: nowrap;
+}
+.centered-table .q-table__cell {
+    text-align: center;
+}
+.card {
+    transition: transform 0.15s;
+    background-color: var(--app-card-bg);
+    z-index: 2;
+    box-shadow: 0 10px 26px rgba(var(--maia-wine-deep-rgb), 0.08);
+    border: 1px solid var(--app-gold-line);
+    border-radius: 15px;
+}
+.card:hover {
+    transform: scale(1.03);
+    background: linear-gradient(146deg, #{$maia-wine} 0%, #{$maia-wine-light} 120%);
+    color: #ffffff;
+}
+.card:hover .li,
+.card:hover .ico {
+    color: #ffffff;
+}
+.jj {
+    width: 90%;
+    margin: auto;
+}
+.jj .card {
+    transition: all 0.5s;
+    margin-top: 2rem;
+}
+.icon-container {
+    padding: 2px;
+    display: flex;
+    justify-content: left;
+    z-index: 1;
+}
+.ico {
+    margin-top: 0.5rem;
+    color: $maia-wine;
+    padding: 4px;
+    background: linear-gradient(146deg, #{$maia-gold-pale} 0%, #{$maia-gold-light} 120%);
+    border-radius: 10px;
+    text-align: left;
+}
+.text-container {
+    text-align: left;
+}
+.li {
+    font-size: 1.2em;
+    font-weight: bold;
+    color: $maia-wine;
+}
+.card-title {
+    text-transform: uppercase;
+    font-weight: bold;
+    white-space: normal;
+    word-break: break-word;
+    overflow: hidden;
+    font-size: clamp(0.85rem, 1.6vw, 1.05rem);
+    line-height: 1.1;
+}
+.q-toolbar-title {
+    white-space: normal;
+    word-break: break-word;
+    font-size: clamp(0.9rem, 1.8vw, 1.1rem);
+}
+
+:root {
+    --app-card-width: 700px;
+    --app-card-height: 220px;
+}
+
+.app-card {
+    width: 100%;
+    max-width: var(--app-card-width);
+    box-sizing: border-box;
+    min-height: 220px;
+}
+.app-card.dialog-card {
+    max-width: 600px;
+}
+.auto-fit-text {
+    white-space: normal;
+    word-break: break-word;
+    overflow: hidden;
+    display: block;
+    font-size: clamp(0.78rem, 1.6vw, 1rem);
+    line-height: 1.1;
+}

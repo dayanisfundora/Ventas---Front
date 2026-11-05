@@ -1,0 +1,8 @@
+import '@fontsource/inter/400'
+import '@fontsource/inter/500'
+import '@fontsource/inter/600'
+import '@fontsource/inter/700'
+import '@fontsource/playfair-display/500'
+import '@fontsource/playfair-display/600'
+import '@fontsource/playfair-display/700'
+import '@fontsource/playfair-display/500-italic'

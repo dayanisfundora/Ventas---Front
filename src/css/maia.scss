@@ -1,0 +1,198 @@
+// Shared styles for the Maia Arte (ferias) pages
+
+.maia-page {
+    padding: 12px 24px 24px;
+    min-height: 100%;
+    background:
+        radial-gradient(ellipse 900px 420px at 100% 0%, rgba(var(--maia-gold-light-rgb), 0.10), transparent 70%),
+        radial-gradient(ellipse 700px 380px at 0% 100%, rgba(var(--maia-wine-rgb), 0.05), transparent 70%),
+        repeating-linear-gradient(0deg, rgba(var(--maia-wine-rgb), 0.012) 0 1px, transparent 1px 3px),
+        var(--app-surface);
+
+    @media (max-width: 600px) {
+        padding: 8px 10px 14px;
+    }
+}
+
+body.body--dark .maia-page {
+    background:
+        radial-gradient(ellipse 900px 420px at 100% 0%, rgba(var(--maia-gold-light-rgb), 0.06), transparent 70%),
+        radial-gradient(ellipse 700px 380px at 0% 100%, rgba(var(--maia-wine-rgb), 0.12), transparent 70%),
+        var(--app-surface);
+}
+
+/* ---------- Page header ---------- */
+.maia-page-header {
+    margin-bottom: 12px;
+}
+
+.maia-kicker {
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: $maia-gold;
+    margin-bottom: 2px;
+}
+
+.maia-title {
+    font-family: $maia-serif;
+    font-weight: 600;
+    font-size: 1.6rem;
+    line-height: 1.1;
+    color: $maia-wine;
+}
+
+body.body--dark .maia-title {
+    color: #f1e8dc;
+}
+
+.maia-title-ornament {
+    display: block;
+    margin-top: 2px;
+}
+
+/* ---------- Cards ---------- */
+.maia-card {
+    border-radius: 16px;
+    background: var(--app-card-bg);
+    border: 1px solid var(--app-gold-line);
+    box-shadow: 0 1px 2px rgba(var(--maia-wine-deep-rgb), 0.04), 0 14px 32px rgba(var(--maia-wine-deep-rgb), 0.07);
+}
+
+.maia-card--accent {
+    border-top: 3px solid $maia-gold;
+}
+
+body.body--dark .maia-card {
+    box-shadow: 0 6px 26px rgba(0, 0, 0, 0.35);
+}
+
+.maia-card .text-subtitle1.text-weight-bold,
+.maia-card .text-subtitle2 {
+    font-family: $maia-serif;
+    color: $maia-wine;
+    letter-spacing: 0.01em;
+}
+
+body.body--dark .maia-card .text-subtitle1.text-weight-bold,
+body.body--dark .maia-card .text-subtitle2 {
+    color: $maia-gold-light;
+}
+
+/* ---------- Tables ---------- */
+.maia-table {
+    border-radius: 16px;
+    background: var(--app-card-bg);
+
+    thead th {
+        font-weight: 600;
+        font-size: 0.72rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--table-head-text);
+        background: var(--table-head-bg);
+        border-bottom: 1px solid var(--app-gold-line);
+    }
+
+    tbody tr:hover td {
+        background: var(--table-row-hover);
+    }
+
+    tbody td {
+        border-color: rgba(var(--maia-gold-rgb), 0.12);
+    }
+
+    tbody tr.total-row td,
+    tr.total-row td {
+        font-weight: 700;
+        border-top: 2px solid rgba(var(--maia-gold-rgb), 0.55);
+        background: rgba(var(--maia-gold-light-rgb), 0.08);
+    }
+
+    .q-table__bottom {
+        border-top: 1px solid var(--app-gold-line);
+    }
+}
+
+.maia-sticky {
+    .q-table__top,
+    thead tr:first-child th {
+        background-color: var(--table-head-bg);
+    }
+
+    thead tr th {
+        position: sticky;
+        z-index: 1;
+    }
+
+    thead tr:first-child th {
+        top: 0;
+    }
+}
+
+.maia-sticky-panel {
+    position: sticky;
+    top: 76px;
+}
+
+/* ---------- Stats ---------- */
+.maia-stat {
+    position: relative;
+    height: 100%;
+    padding: 14px 16px 14px 18px;
+    border-radius: 14px;
+    overflow: hidden;
+    background: var(--app-card-bg);
+    border: 1px solid var(--app-gold-line);
+    box-shadow: 0 10px 24px rgba(var(--maia-wine-deep-rgb), 0.06);
+
+    &::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 12px;
+        bottom: 12px;
+        width: 3px;
+        border-radius: 0 3px 3px 0;
+        background: linear-gradient(180deg, #{$maia-gold-light} 0%, #{$maia-gold} 100%);
+    }
+
+    .stat-label,
+    .maia-stat__label {
+        font-size: 0.68rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: var(--app-text-muted);
+    }
+
+    .stat-value,
+    .maia-stat__value {
+        margin-top: 2px;
+        font-family: $maia-serif;
+        font-size: 1.45rem;
+        font-weight: 600;
+        line-height: 1.2;
+    }
+
+    .stat-caption {
+        font-size: 0.75rem;
+        color: var(--app-text-muted);
+    }
+}
+
+/* ---------- Dialogs and fields ---------- */
+.maia-dialog-card {
+    width: 720px;
+    max-width: 94vw;
+    border-radius: 16px;
+}
+
+.maia-field .q-field__control {
+    border-radius: 10px;
+}
+
+.text-mono {
+    font-variant-numeric: tabular-nums;
+}

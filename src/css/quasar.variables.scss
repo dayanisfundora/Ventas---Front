@@ -1,0 +1,74 @@
+// Quasar SCSS (& Sass) Variables
+// --------------------------------------------------
+// The business palette is configurable at runtime (Configuración › Identidad del negocio).
+// Default theme: Vino Maia, primary wine #7a1f2b.
+// Brand colors are CSS variables set by src/assets/js/util/brand.js; the hex values
+// below are only the defaults used before the app boots.
+
+$maia-palette-defaults: (
+    'wine-deep': #4a111b,
+    'wine': #7a1f2b,
+    'wine-light': #8e2a36,
+    'ink': #2a1418,
+    'ink-2': #3b1a20,
+    'gold': #b8893b,
+    'gold-light': #d4af6a,
+    'gold-pale': #efe0bf,
+    'ivory': #faf6f0,
+    'ivory-2': #f3ece1,
+    'dark': #241a1c,
+    'dark-page': #1a1214,
+    'gold-bright': #e6c88a,
+    'wine-on-dark': #e8a5ae,
+    'header-dark-1': #2a0d13,
+    'header-dark-3': #5c1923,
+);
+
+// Quasar brand colors must stay literal for Quasar's own Sass; runtime values come from setCssVar
+$primary: #7a1f2b;
+$secondary: #b8893b;
+$accent: #d4af6a;
+
+$dark: #241a1c;
+$dark-page: #1a1214;
+
+$positive: #2e7d5b;
+$negative: #b3261e;
+$info: #3d6e8c;
+$warning: #e0a526;
+
+// Brand — runtime (CSS variables). Never pass these to Sass color functions; use brand-a() for alpha.
+$maia-wine-deep: var(--maia-wine-deep);
+$maia-wine: var(--maia-wine);
+$maia-wine-light: var(--maia-wine-light);
+$maia-ink: var(--maia-ink);
+$maia-ink-2: var(--maia-ink-2);
+
+$maia-gold: var(--maia-gold);
+$maia-gold-light: var(--maia-gold-light);
+$maia-gold-pale: var(--maia-gold-pale);
+$maia-gold-bright: var(--maia-gold-bright);
+
+$maia-ivory: var(--maia-ivory);
+$maia-ivory-2: var(--maia-ivory-2);
+$maia-dark: var(--maia-dark);
+$maia-dark-page: var(--maia-dark-page);
+
+$maia-silver: #c8c4c0;
+
+// Logo feather spectrum (accents/charts only, not configurable)
+$maia-violet: #6b2d8b;
+$maia-blue: #2f6fbf;
+$maia-teal: #1aa6a0;
+$maia-emerald: #2e9b4a;
+$maia-yellow: #e6c20f;
+$maia-orange: #e67a22;
+$maia-flame: #c4392a;
+
+$maia-serif: 'Playfair Display', Georgia, 'Times New Roman', serif;
+$maia-sans: 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+/// Brand color with alpha, e.g. brand-a(gold-light, 0.3)
+@function brand-a($name, $alpha) {
+    @return rgba(var(--maia-#{$name}-rgb), $alpha);
+}
