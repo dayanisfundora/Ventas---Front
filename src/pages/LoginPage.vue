@@ -115,6 +115,7 @@
             </div>
 
             <p class="lp-footer">© {{ currentYear }} {{ brandStore.name }}. Todos los derechos reservados.</p>
+            <p class="lp-dev">Desarrollado por <strong>{{ developerName }}</strong></p>
         </main>
     </div>
 </template>
@@ -128,6 +129,7 @@ import MaiaOrnament from 'src/components/maia/MaiaOrnament.vue';
 import BrandName from 'src/components/maia/BrandName.vue';
 import { useBrandStore } from 'src/stores/brand-store';
 import { apiErrorMessage } from 'src/assets/js/util/maia';
+import { DEVELOPER_NAME } from 'src/assets/js/util/brand';
 
 export default {
     name: 'LoginPage',
@@ -208,6 +210,7 @@ export default {
         return {
             brandStore,
             currentYear,
+            developerName: DEVELOPER_NAME,
             username,
             password,
             showPassword,
@@ -528,6 +531,19 @@ export default {
     font-size: 0.74rem;
     letter-spacing: 0.04em;
     color: #9c8a7f;
+}
+
+.lp-dev {
+    margin: 6px 0 0;
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    color: #9c8a7f;
+
+    strong {
+        color: $maia-gold;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+    }
 }
 
 /* === Dark mode === */

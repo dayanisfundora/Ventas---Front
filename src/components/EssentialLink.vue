@@ -136,6 +136,7 @@ import { computed } from 'vue'
 import { essentialListUrl } from 'src/assets/js/util/essentialListUrl'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from 'src/stores/auth-store'
+import { featureEnabled } from 'src/assets/js/util/features'
 
 const route = useRoute()
 const authStore = useAuthStore()
@@ -171,6 +172,10 @@ const filteredLinks = computed(() => {
   return essentialListUrl
     .map(link => ({ ...link })) // Create shallow copy
     .filter(link => {
+      if (!featureEnabled(link.feature)) {
+        return false
+      }
+
       // If no permission is defined, don't show the link
       if (!link.permission) {
         return false

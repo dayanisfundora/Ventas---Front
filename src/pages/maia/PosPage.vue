@@ -195,16 +195,24 @@
                                         @click="payments.splice(i, 1)" />
                                 </div>
                             </div>
-                            <div class="row q-mt-xs text-body2 items-start">
-                                <div>Pagado: <b>{{ paidDisplay }}</b></div>
-                                <q-space />
-                                <div v-if="remainingCup > 0.009" class="text-negative text-right">
-                                    Falta: <b>{{ balanceDisplay(remainingCup) }}</b>
+                            <div class="pos-pay-check text-body2" :class="payCheckClass">
+                                <div>
+                                    Total {{ money(total) }} CUP · Pagado {{ paidDisplay }}
+                                    <template v-if="showPaidCupEquiv"> = <b>{{ money(paidCup) }} CUP</b></template>
                                 </div>
-                                <div v-else-if="excessCup > 0.009" class="text-positive text-right">
-                                    A propina: <b>{{ balanceDisplay(excessCup) }}</b>
+                                <div v-if="remainingCup > 0.009" class="text-right">
+                                    Falta <b>{{ balanceDisplay(remainingCup) }}</b>
                                 </div>
-                                <div v-else-if="total > 0" class="text-positive">Exacto</div>
+                                <div v-else-if="tipFromExcess" class="text-right">
+                                    A propina <b>{{ money(tipFromExcess.amount) }} {{ tipFromExcess.currency }}</b>
+                                </div>
+                                <div v-else-if="total > 0" class="text-right"><b>Exacto</b></div>
+                            </div>
+                            <div v-if="mixedPayRates.length" class="text-caption text-grey-7 q-mt-xs">
+                                Tasa:
+                                <span v-for="(r, i) in mixedPayRates" :key="r.currency">
+                                    <template v-if="i"> · </template>1 {{ r.currency }} = {{ money(r.rate) }} CUP
+                                </span>
                             </div>
                         </q-card-section>
 
@@ -369,10 +377,10 @@
                                 @click="editPayments.splice(i, 1)" />
                         </div>
                         <div class="text-caption"
-                            :class="editRemaining > 0.009 ? 'text-negative' : editExcess > 0.009 ? 'text-positive' : 'text-grey-7'">
+                            :class="editRemaining > 0.009 ? 'text-negative' : editTipFromExcess ? 'text-positive' : 'text-grey-7'">
                             Pagado {{ money(editPaidCup) }} CUP
                             <span v-if="editRemaining > 0.009"> · Falta {{ money(editRemaining) }}</span>
-                            <span v-else-if="editExcess > 0.009"> · A propina {{ money(editExcess) }}</span>
+                            <span v-else-if="editTipFromExcess"> · A propina {{ money(editTipFromExcess.amount) }} {{ editTipFromExcess.currency }}</span>
                         </div>
                     </div>
 
@@ -435,10 +443,14 @@
                     </div>
                     <div v-else class="pos-scan-lines">
                         <div v-for="(line, idx) in scanLines" :key="line.id" class="pos-scan-line"
-                            :class="`pos-scan-line--${line.confidence}`">
+                            :class="`pos-scan-line--${scanCheck(line).status}`">
+                            <div v-if="line.preview" class="pos-scan-line__preview">
+                                <img :src="line.preview" alt="Fila escrita en la hoja" />
+                            </div>
                             <q-checkbox dense v-model="line.selected" :disable="!line.product_id || !(line.amount > 0)" />
                             <q-select class="maia-field pos-scan-line__worker" dense outlined emit-value map-options options-dense
-                                clearable label="Vendedor" :options="workerOptions" v-model="line.worker_id" hide-bottom-space />
+                                clearable label="Vendedor" :options="workerOptions" v-model="line.worker_id" hide-bottom-space
+                                @update:model-value="() => { if (scanCheck(line).status === 'ok') line.selected = true }" />
                             <q-select class="maia-field pos-scan-line__product" dense outlined emit-value map-options options-dense
                                 use-input fill-input hide-selected input-debounce="200" label="Producto"
                                 :options="scanProductOptions(line)" @filter="filterScanProducts"
@@ -449,15 +461,47 @@
                                 @change="syncScanAmount(line)" />
                             <q-input class="maia-field pos-scan-line__amount" dense outlined type="number" min="0" step="0.01"
                                 label="Importe" v-model.number="line.amount" input-class="text-right" hide-bottom-space
-                                @change="() => { line.unit_price = line.quantity > 0 ? round2(line.amount / line.quantity) : line.amount }" />
+                                @change="syncScanUnitPrice(line)" />
                             <q-select class="maia-field pos-scan-line__pay" dense outlined emit-value map-options options-dense
-                                label="Pago" :options="methodOptions" v-model="line.payment_method_id" hide-bottom-space />
+                                label="Pago" :options="methodOptions" v-model="line.payment_method_id" hide-bottom-space
+                                @update:model-value="syncScanUnitPrice(line)" />
                             <div class="pos-scan-line__meta">
-                                <q-badge :color="line.confidence === 'high' ? 'positive' : line.confidence === 'medium' ? 'warning' : 'negative'"
-                                    :label="line.confidence === 'high' ? 'OK' : line.confidence === 'medium' ? 'Revisar' : 'Error'" />
+                                <q-badge :color="SCAN_STATUS[scanCheck(line).status].color" :label="SCAN_STATUS[scanCheck(line).status].label">
+                                    <q-tooltip>{{ scanCheck(line).message }}</q-tooltip>
+                                </q-badge>
+                                <q-btn flat round dense size="sm" color="primary" icon="add_card" @click="addScanPayment(line)">
+                                    <q-tooltip>Agregar otro pago</q-tooltip>
+                                </q-btn>
                                 <q-btn flat round dense size="sm" color="negative" icon="delete" @click="scanLines.splice(idx, 1)" />
                             </div>
-                            <div v-if="line.raw" class="pos-scan-line__raw text-caption text-grey-7">{{ line.raw }}</div>
+                            <div v-for="(pay, pi) in line.extra_payments || []" :key="pi" class="pos-scan-line__extra">
+                                <span class="pos-scan-line__extra-label text-caption text-grey-7">Pago adicional</span>
+                                <q-input class="maia-field pos-scan-line__extra-amount" dense outlined type="number" min="0" step="0.01"
+                                    label="Importe" v-model.number="pay.amount" input-class="text-right" hide-bottom-space
+                                    @change="syncScanUnitPrice(line)" />
+                                <q-select class="maia-field pos-scan-line__extra-pay" dense outlined emit-value map-options options-dense
+                                    label="Pago" :options="methodOptions" v-model="pay.payment_method_id" hide-bottom-space
+                                    @update:model-value="syncScanUnitPrice(line)" />
+                                <div class="pos-scan-line__extra-remove">
+                                    <q-btn flat round dense size="sm" color="negative" icon="close"
+                                        @click="() => { line.extra_payments.splice(pi, 1); syncScanUnitPrice(line) }">
+                                        <q-tooltip>Quitar este pago</q-tooltip>
+                                    </q-btn>
+                                </div>
+                            </div>
+                            <div v-if="scanSuggestions(line).length" class="pos-scan-line__suggest">
+                                <span class="text-caption text-grey-7">¿Es otro código?</span>
+                                <q-chip v-for="s in scanSuggestions(line)" :key="s.product_id" dense clickable outline color="grey-7"
+                                    @click="pickScanSuggestion(line, s.product_id)">
+                                    {{ s.code }} · {{ s.name }}
+                                </q-chip>
+                            </div>
+                            <div class="pos-scan-line__check text-caption" :class="`text-${SCAN_STATUS[scanCheck(line).status].text}`">
+                                {{ scanCheck(line).message }}
+                                <q-btn v-if="line.amount_from_catalog" flat dense no-caps size="sm" color="positive" icon="check"
+                                    label="Es correcto" class="q-ml-sm" @click="syncScanUnitPrice(line)" />
+                            </div>
+                            <div v-if="scanSummary(line)" class="pos-scan-line__raw text-caption text-grey-7">{{ scanSummary(line) }}</div>
                         </div>
                     </div>
                 </div>
@@ -596,11 +640,10 @@ const removeLine = (line) => {
 const total = computed(() => cart.value.reduce((s, l) => s + l.quantity * Number(l.product.price_cup), 0))
 
 /* ---------- Payments ---------- */
+const round2 = (v) => Math.round(v * 100) / 100
 const paymentCup = (p) => Number(p.amount || 0) * rate(methodCurrency(p.payment_method_id))
 const paidCup = computed(() => payments.value.reduce((s, p) => s + paymentCup(p), 0))
 const remainingCup = computed(() => Math.max(0, total.value - paidCup.value))
-const excessCup = computed(() => Math.max(0, paidCup.value - total.value))
-const round2 = (v) => Math.round(v * 100) / 100
 
 /** Amounts grouped by the currency actually entered (not converted to CUP). */
 const paidByCurrency = computed(() => {
@@ -617,6 +660,54 @@ const paidByCurrency = computed(() => {
 const paidDisplay = computed(() => {
     if (!paidByCurrency.value.length) return `${money(0)} CUP`
     return paidByCurrency.value.map(({ currency, amount }) => `${money(amount)} ${currency}`).join(' + ')
+})
+
+/** Show "= X CUP" when any payment is not CUP (so 500 CUP + 5 USD is clear). */
+const showPaidCupEquiv = computed(() => paidByCurrency.value.some((r) => r.currency !== 'CUP'))
+
+const mixedPayRates = computed(() => {
+    const seen = new Set()
+    return paidByCurrency.value
+        .filter((r) => r.currency !== 'CUP' && !seen.has(r.currency) && (seen.add(r.currency), true))
+        .map((r) => ({ currency: r.currency, rate: rate(r.currency) }))
+})
+
+/**
+ * Surplus over the total, kept in the currency that overshot
+ * (e.g. 500 CUP + 2 USD on a 1500 CUP item → tip in USD, not converted to CUP).
+ * @returns {{ payment_method_id: number|null, currency: string, amount: number }|null}
+ */
+const excessTip = (list, totalCup) => {
+    const paid = list.filter((p) => p.payment_method_id && Number(p.amount) > 0)
+    const isCup = (p) => (methodCurrency(p.payment_method_id) || 'CUP') === 'CUP'
+    const allCup = paid.reduce((s, p) => s + paymentCup(p), 0)
+    const excess = round2(allCup - totalCup)
+    if (excess < 0.01) return null
+    const cupOnly = paid.filter(isCup).reduce((s, p) => s + Number(p.amount), 0)
+    const foreignOvershoot = round2(Math.max(0, allCup - cupOnly) - Math.max(0, totalCup - cupOnly))
+    if (foreignOvershoot > 0.009) {
+        const pay = [...paid].reverse().find((p) => !isCup(p))
+        const currency = methodCurrency(pay.payment_method_id)
+        return {
+            payment_method_id: pay.payment_method_id,
+            currency,
+            amount: round2(foreignOvershoot / (rate(currency) || 1)),
+        }
+    }
+    return {
+        payment_method_id: cashCup.value?.id || paid.find(isCup)?.payment_method_id || null,
+        currency: 'CUP',
+        amount: excess,
+    }
+}
+
+const tipFromExcess = computed(() => excessTip(payments.value, total.value))
+
+const payCheckClass = computed(() => {
+    if (!(total.value > 0) || !(paidCup.value > 0)) return 'text-grey-8'
+    if (remainingCup.value > 0.009) return 'text-negative'
+    if (tipFromExcess.value) return 'text-positive'
+    return 'text-positive'
 })
 
 /** Prefer showing a CUP balance in the single payment currency when there is only one. */
@@ -642,26 +733,21 @@ const syncTipFromSeller = () => {
 }
 
 const applyExcessAsTip = () => {
-    if (!withTip.value) return
     syncTipFromSeller()
-    // Prefer tip in the same method as the (first) payment; fallback to CUP cash
-    if (!tip.payment_method_id) {
-        tip.payment_method_id = payments.value[0]?.payment_method_id || cashCup.value?.id || methods.value[0]?.id || null
-    }
-    // No overpay → clear auto tip (avoids leftover huge amounts after correcting the payment)
-    if (excessCup.value < 0.01) {
+    const plan = tipFromExcess.value
+    if (!plan) {
         tip.amount = null
+        tip.payment_method_id = cashCup.value?.id || tip.payment_method_id
         return
     }
-    const currency = methodCurrency(tip.payment_method_id) || 'CUP'
-    const tipRate = rate(currency)
-    tip.amount = currency === 'CUP' || tipRate === 1
-        ? round2(excessCup.value)
-        : Math.ceil((excessCup.value / tipRate) * 100) / 100
+    // Surplus stays in the overshoot currency; turn tip on so Cobrar can proceed.
+    withTip.value = true
+    tip.payment_method_id = plan.payment_method_id || cashCup.value?.id || tip.payment_method_id
+    tip.amount = plan.amount
 }
 
 watch(workerId, () => syncTipFromSeller())
-watch([excessCup, withTip, () => tip.payment_method_id, paidCup], () => applyExcessAsTip())
+watch([tipFromExcess, withTip, paidCup], () => applyExcessAsTip())
 
 const addPayment = (methodId = null) => {
     payments.value.push({ payment_method_id: methodId || cashCup.value?.id || methods.value[0]?.id, amount: null })
@@ -678,8 +764,7 @@ const canCharge = computed(() => {
     if (fairStore.isDayClosed || !fairStore.dayId || !cart.value.length || remainingCup.value >= 0.01 || !can('pos.vender')) {
         return false
     }
-    if (excessCup.value > 0.009) {
-        if (!withTip.value) return false
+    if (tipFromExcess.value) {
         if (!workerId.value && !tip.worker_id) return false
     }
     return true
@@ -844,6 +929,7 @@ const scanUnavailable = ref(false)
 const scanLoading = ref(false)
 const scanConfirming = ref(false)
 const scanLines = ref([])
+const scanToken = ref(null)
 const scanWarnings = ref([])
 const scanPreviewUrl = ref(null)
 const scanFileInput = ref(null)
@@ -852,6 +938,7 @@ const scanSelectedCount = computed(() => scanLines.value.filter((l) => l.selecte
 
 const resetScan = (revokePreview = true) => {
     scanLines.value = []
+    scanToken.value = null
     scanWarnings.value = []
     scanLoading.value = false
     scanConfirming.value = false
@@ -896,7 +983,14 @@ const onScanFileChosen = async (ev) => {
             headers: { 'Content-Type': 'multipart/form-data' },
             timeout: 180000,
         })
-        scanLines.value = (data.data?.lines || []).map((l) => ({ ...l, selected: !!l.selected }))
+        scanToken.value = data.data?.scan_token || null
+        scanLines.value = (data.data?.lines || []).map((l) => {
+            const line = { ...l, extra_payments: (l.extra_payments || []).map((p) => ({ ...p })) }
+            const read = l.product_id ? [{ product_id: l.product_id, code: l.product_code, name: l.product_name }] : []
+            line.suggestions = [...read, ...(l.suggestions || [])]
+            line.selected = scanCheck(line).status === 'ok'
+            return line
+        })
         scanWarnings.value = data.data?.warnings || []
         if (data.message) Success(data.message)
     } catch (error) {
@@ -934,20 +1028,99 @@ const onScanProductPicked = (line, productId) => {
     line.product_code = p.code
     line.product_name = p.name
     line.catalog_price_cup = Number(p.price_cup)
-    if (!(line.amount > 0)) {
+    if (!(line.amount > 0) || (line.amount_from_catalog && !line.extra_payments?.length)) {
         line.unit_price = Number(p.price_cup)
         line.amount = round2(line.unit_price * (Number(line.quantity) || 1))
     }
-    line.selected = true
+    line.selected = scanCheck(line).status === 'ok'
+}
+
+/** Other codes the reader considered, and products whose price matches what was charged. None once the line checks out. */
+const scanSuggestions = (line) => {
+    if (scanCheck(line).status === 'ok') return []
+    return (line.suggestions || []).filter((s) => s.product_id !== line.product_id)
+}
+
+const pickScanSuggestion = (line, productId) => {
+    line.product_id = productId
+    onScanProductPicked(line, productId)
+}
+
+const scanLinePayments = (line) => [
+    { payment_method_id: line.payment_method_id, amount: Number(line.amount) },
+    ...(line.extra_payments || []).map((p) => ({ payment_method_id: p.payment_method_id, amount: Number(p.amount) })),
+].filter((p) => p.payment_method_id && p.amount > 0)
+
+/** Row summary with the values as currently edited (not the raw OCR reading). */
+const scanSummary = (line) => {
+    if (!line.scan_row) return line.raw || ''
+    const qty = Math.max(1, Math.floor(Number(line.quantity) || 1))
+    const paid = scanLinePayments(line).map((p) => `${methodCurrency(p.payment_method_id) || 'CUP'} ${money(p.amount)}`)
+    return [`Fila ${line.scan_row}`, `Cód ${line.product_code || '?'}`, `Cant ${qty}`, ...paid].join(' · ')
+}
+
+const scanLineTotalCup = (line) => round2(scanLinePayments(line).reduce((sum, p) => {
+    const currency = methodCurrency(p.payment_method_id) || 'CUP'
+    return sum + (currency === 'CUP' ? p.amount : p.amount * rate(currency))
+}, 0))
+
+const SCAN_STATUS = {
+    ok: { label: 'OK', color: 'positive', text: 'positive' },
+    mismatch: { label: 'Revisar', color: 'warning', text: 'orange-9' },
+    error: { label: 'Error', color: 'negative', text: 'negative' },
+}
+/** Converting foreign currency can leave a few cents of difference against the catalog price. */
+const SCAN_TOLERANCE_CUP = 1
+
+/** Charged amount (all payments in CUP) against catalog price × quantity, like a regular sale. */
+const scanCheck = (line) => {
+    const product = products.value.find((p) => p.id === line.product_id)
+    if (!product) return { status: 'error', message: 'Elija el producto para comparar lo cobrado con su precio.' }
+    const paid = scanLinePayments(line)
+    const charged = scanLineTotalCup(line)
+    if (!paid.length || !(charged > 0)) return { status: 'error', message: 'Falta el importe cobrado y su forma de pago.' }
+
+    const qty = Math.max(1, Math.floor(Number(line.quantity) || 1))
+    const expected = round2(qty * Number(product.price_cup))
+    const paidText = paid.map((p) => `${money(p.amount)} ${methodCurrency(p.payment_method_id) || 'CUP'}`).join(' + ')
+    const converted = paid.length > 1 || paid.some((p) => (methodCurrency(p.payment_method_id) || 'CUP') !== 'CUP')
+    const detail = `Precio: ${qty} × ${money(product.price_cup)} = ${money(expected)} CUP · Cobrado: ${paidText}`
+        + (converted ? ` = ${money(charged)} CUP` : '')
+    const diff = round2(charged - expected)
+    if (line.amount_from_catalog) {
+        return { status: 'mismatch', message: `${detail} · No se leyó lo cobrado en la hoja: se puso el precio del catálogo` }
+    }
+    if (Math.abs(diff) <= SCAN_TOLERANCE_CUP) return { status: 'ok', message: `${detail} · Exacto` }
+    if (diff < 0) return { status: 'mismatch', message: `${detail} · Falta ${money(-diff)} CUP` }
+    const tipPlan = excessTip(paid, expected)
+    const tipText = `A propina ${money(tipPlan.amount)} ${tipPlan.currency}`
+    if (!line.worker_id) return { status: 'mismatch', message: `${detail} · ${tipText}: elija el vendedor` }
+    return { status: 'ok', message: `${detail} · ${tipText}`, tip: tipPlan }
+}
+
+const syncScanUnitPrice = (line) => {
+    line.amount_from_catalog = false
+    const qty = Math.max(1, Math.floor(Number(line.quantity) || 1))
+    line.unit_price = round2(scanLineTotalCup(line) / qty)
+    if (scanCheck(line).status === 'ok') line.selected = true
 }
 
 const syncScanAmount = (line) => {
     line.quantity = Math.max(1, Math.floor(Number(line.quantity) || 1))
-    if (line.unit_price > 0) {
+    if (line.extra_payments?.length) {
+        syncScanUnitPrice(line)
+    } else if (line.unit_price > 0) {
         line.amount = round2(line.unit_price * line.quantity)
     } else if (line.amount > 0) {
         line.unit_price = round2(line.amount / line.quantity)
     }
+}
+
+const addScanPayment = (line) => {
+    if (!line.extra_payments) line.extra_payments = []
+    const used = new Set([line.payment_method_id, ...line.extra_payments.map((p) => p.payment_method_id)])
+    const next = methodOptions.value.find((o) => !used.has(o.value))
+    line.extra_payments.push({ payment_method_id: next?.value ?? null, amount: null })
 }
 
 const confirmScanLines = async () => {
@@ -956,25 +1129,35 @@ const confirmScanLines = async () => {
     scanConfirming.value = true
     let ok = 0
     const errors = []
+    const learnRows = []
     for (const line of rows) {
         const qty = Math.max(1, Math.floor(Number(line.quantity) || 1))
-        const payAmount = Number(line.amount)
-        const currency = methodCurrency(line.payment_method_id) || 'CUP'
-        const r = rate(currency)
-        const totalCup = currency === 'CUP' ? payAmount : round2(payAmount * r)
-        const unitPrice = qty > 0 ? round2(totalCup / qty) : totalCup
+        const payments = scanLinePayments(line)
+        const check = scanCheck(line)
+        const unitPrice = check.tip
+            ? Number(products.value.find((p) => p.id === line.product_id)?.price_cup)
+            : round2(scanLineTotalCup(line) / qty)
         try {
             await api.post('Sale/Create', {
                 fair_day_id: fairStore.dayId,
                 worker_id: line.worker_id || null,
-                notes: line.raw ? `OCR: ${String(line.raw).slice(0, 200)}` : 'Importado desde hoja',
+                notes: scanSummary(line) ? `Hoja: ${scanSummary(line).slice(0, 200)}` : 'Importado desde hoja',
                 items: [{ product_id: line.product_id, quantity: qty, unit_price: unitPrice }],
-                payments: [{ payment_method_id: line.payment_method_id, amount: payAmount }],
+                payments,
+                ...(check.tip ? {
+                    tip: {
+                        worker_id: line.worker_id,
+                        payment_method_id: check.tip.payment_method_id,
+                        amount: check.tip.amount,
+                    },
+                } : {}),
             })
             ok += 1
             line.selected = false
-            line.confidence = 'high'
             line._done = true
+            if (line.scan_row && /^\d+$/.test(String(line.product_code || ''))) {
+                learnRows.push({ row: line.scan_row, code: String(line.product_code), quantity: qty })
+            }
         } catch (error) {
             const msg = error?.response?.data?.message
                 || error?.response?.data?.errors?.items?.[0]
@@ -984,6 +1167,9 @@ const confirmScanLines = async () => {
         }
     }
     scanLines.value = scanLines.value.filter((l) => !l._done)
+    if (scanToken.value && learnRows.length) {
+        api.post('Sale/ScanSheet/Learn', { scan_token: scanToken.value, rows: learnRows }).catch(() => {})
+    }
     await loadCatalog()
     scanConfirming.value = false
     if (ok) Success(`${ok} venta(s) registrada(s).`)
@@ -1017,12 +1203,11 @@ const editMaxQty = (line) => {
 const editTotal = computed(() => editCart.value.reduce((s, l) => s + Number(l.quantity || 0) * Number(l.unit_price || 0), 0))
 const editPaidCup = computed(() => editPayments.value.reduce((s, p) => s + Number(p.amount || 0) * rate(methodCurrency(p.payment_method_id)), 0))
 const editRemaining = computed(() => Math.max(0, editTotal.value - editPaidCup.value))
-const editExcess = computed(() => Math.max(0, editPaidCup.value - editTotal.value))
+const editTipFromExcess = computed(() => excessTip(editPayments.value, editTotal.value))
 
 const canSaveEdit = computed(() => {
     if (!editCart.value.length || editRemaining.value >= 0.01 || editSaving.value) return false
-    if (editExcess.value > 0.009) {
-        if (!editWithTip.value) return false
+    if (editTipFromExcess.value) {
         if (!editWorkerId.value && !editTip.worker_id) return false
     }
     return editPayments.value.some((p) => p.payment_method_id && Number(p.amount) > 0)
@@ -1096,8 +1281,10 @@ const openEditSale = async (sale) => {
 
 const saveEditSale = async () => {
     if (!canSaveEdit.value || !editSale.value) return
-    if (editExcess.value > 0.009 && editWithTip.value && !(Number(editTip.amount) > 0)) {
-        editTip.amount = round2(editExcess.value / rate(methodCurrency(editTip.payment_method_id) || 'CUP'))
+    if (editTipFromExcess.value) {
+        editWithTip.value = true
+        editTip.payment_method_id = editTipFromExcess.value.payment_method_id || cashCup.value?.id || editTip.payment_method_id
+        if (!(Number(editTip.amount) > 0)) editTip.amount = editTipFromExcess.value.amount
     }
     const payload = {
         worker_id: editWorkerId.value || null,
@@ -1314,6 +1501,15 @@ body.body--dark .pos-list-item__price .text-primary.text-weight-bold {
     grid-template-columns: minmax(0, 1.15fr) minmax(108px, 0.85fr) auto;
     gap: 8px;
     align-items: center;
+}
+
+.pos-pay-check {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 4px 12px;
+    margin-top: 4px;
 }
 
 .pos-pay-method,
@@ -1554,6 +1750,58 @@ body.body--dark .pos-panel--checkout .pos-actions {
         padding-left: 36px;
     }
 
+    &__preview {
+        grid-column: 1 / -1;
+        overflow-x: auto;
+        border-radius: 8px;
+        border: 1px solid rgba(var(--maia-gold-rgb), 0.25);
+        background: #fff;
+
+        img {
+            display: block;
+            height: 56px;
+            max-width: none;
+        }
+    }
+
+    &__extra {
+        grid-column: 1 / -1;
+        display: grid;
+        grid-template-columns: subgrid;
+        align-items: center;
+    }
+
+    &__extra-label {
+        grid-column: 2 / 5;
+        justify-self: end;
+    }
+
+    &__extra-amount {
+        grid-column: 5;
+    }
+
+    &__extra-pay {
+        grid-column: 6;
+    }
+
+    &__extra-remove {
+        grid-column: 7;
+    }
+
+    &__check {
+        grid-column: 1 / -1;
+        padding-left: 36px;
+    }
+
+    &__suggest {
+        grid-column: 1 / -1;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 2px 4px;
+        padding-left: 36px;
+    }
+
     &__meta {
         display: flex;
         align-items: center;
@@ -1561,11 +1809,11 @@ body.body--dark .pos-panel--checkout .pos-actions {
         padding-top: 4px;
     }
 
-    &--low {
+    &--error {
         background: rgba(179, 38, 30, 0.06);
     }
 
-    &--medium {
+    &--mismatch {
         background: rgba(224, 165, 38, 0.08);
     }
 }
@@ -1574,10 +1822,12 @@ body.body--dark .pos-panel--checkout .pos-actions {
     .pos-scan-line {
         grid-template-columns: auto 1fr 1fr;
         grid-template-areas:
+            'preview preview preview'
             'check worker meta'
             'product product product'
             'qty amount pay';
 
+        &__preview { grid-area: preview; }
         > .q-checkbox { grid-area: check; }
         &__worker { grid-area: worker; }
         &__meta { grid-area: meta; justify-self: end; }
@@ -1585,6 +1835,13 @@ body.body--dark .pos-panel--checkout .pos-actions {
         &__qty { grid-area: qty; }
         &__amount { grid-area: amount; }
         &__pay { grid-area: pay; }
+        &__extra-label { display: none; }
+        &__extra-remove { grid-column: 1; }
+        &__extra-amount { grid-column: 2; }
+        &__extra-pay { grid-column: 3; }
+        &__check,
+        &__suggest,
+        &__raw { padding-left: 0; }
     }
 }
 

@@ -87,6 +87,7 @@ export const essentialListUrl = [
     },
     {
         title: 'FINANZAS',
+        feature: 'finance',
         permission: ['finanzas.ver', 'activos.ver'],
         icon: 'account_balance_wallet',
         children: [

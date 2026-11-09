@@ -10,7 +10,7 @@
         </PageHeader>
 
         <div class="text-caption text-grey q-mb-md">
-            Porcentajes sobre el disponible del cierre de feria. Cada concepto puede enviarse a un bolsillo al repartir.
+            Porcentajes sobre el disponible del cierre de feria.<template v-if="financeEnabled"> Cada concepto puede enviarse a un bolsillo al repartir.</template>
         </div>
 
         <q-table flat class="maia-card maia-table" :rows="items" :columns="columns" row-key="id" :loading="loading"
@@ -47,7 +47,7 @@
                             maxlength="80" counter :rules="[(v) => !!v || 'Requerido']" />
                         <q-input outlined dense class="maia-field" type="number" min="0" max="100" step="0.5" label="Porcentaje *"
                             suffix="%" v-model.number="form.percent" :rules="[(v) => v >= 0 && v <= 100 || '0–100']" />
-                        <q-select outlined dense class="maia-field" emit-value map-options clearable options-dense
+                        <q-select v-if="financeEnabled" outlined dense class="maia-field" emit-value map-options clearable options-dense
                             label="Bolsillo destino" :options="fundOptions" v-model="form.cash_fund_id"
                             hint="Al repartir la feria, este importe va a ese bolsillo." />
                         <q-input outlined dense class="maia-field" type="number" label="Orden" v-model.number="form.sort"
@@ -71,8 +71,10 @@ import PageHeader from 'src/components/maia/PageHeader.vue'
 import { useCrudTable } from 'src/composables/useCrudTable'
 import { useAuthStore } from 'src/stores/auth-store'
 import { notifyApiError } from 'src/assets/js/util/maia'
+import { featureEnabled } from 'src/assets/js/util/features'
 
 const authStore = useAuthStore()
+const financeEnabled = featureEnabled('finance')
 const canEdit = computed(() => authStore.hasPermission('cierre_feria.editar'))
 
 const { items, filter, loading, saving, pagination, load, onRequest, save, remove } = useCrudTable('BudgetConcept')
@@ -85,7 +87,7 @@ const columns = [
     { name: 'code', label: 'Código', field: 'code', align: 'left', sortable: true },
     { name: 'name', label: 'Nombre', field: 'name', align: 'left', sortable: true },
     { name: 'percent', label: '%', field: 'percent', align: 'right', sortable: true },
-    { name: 'cash_fund', label: 'Bolsillo', field: 'cash_fund', align: 'left' },
+    ...(financeEnabled ? [{ name: 'cash_fund', label: 'Bolsillo', field: 'cash_fund', align: 'left' }] : []),
     { name: 'state', label: 'Activo', field: 'state', align: 'center' },
     { name: 'action', label: 'Acciones', field: 'action', align: 'center' },
 ]
@@ -129,7 +131,7 @@ const loadFunds = async () => {
 }
 
 onMounted(async () => {
-    await loadFunds()
+    if (financeEnabled) await loadFunds()
     load(1)
 })
 </script>

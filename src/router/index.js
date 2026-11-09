@@ -2,6 +2,7 @@ import { route } from 'quasar/wrappers'
 import { createRouter, createMemoryHistory, createWebHistory, createWebHashHistory } from 'vue-router'
 import routes from './routes'
 import { useAuthStore } from 'src/stores/auth-store'
+import { featureEnabled } from 'src/assets/js/util/features'
 
 /*
  * If not building with SSR mode, you can
@@ -56,6 +57,10 @@ export default route(function (/* { store, ssrContext } */) {
 
     if (requiresGuest && authStore.isAuthenticated) {
       // Redirect to home if route is for guests only and user is authenticated
+      return next('/')
+    }
+
+    if (!featureEnabled(to.meta.feature)) {
       return next('/')
     }
 
