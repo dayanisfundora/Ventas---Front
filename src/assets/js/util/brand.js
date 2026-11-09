@@ -8,6 +8,9 @@ import { setCssVar } from 'quasar'
 export const DEFAULT_LOGO = '/brand/maia-logo.png'
 export const DEFAULT_PRESET = 'vino'
 
+/** Software developer brand; fixed, not part of the client-configurable identity. */
+export const DEVELOPER_NAME = 'Double Team'
+
 export const PALETTE_GROUPS = [
     {
         label: 'Color principal',

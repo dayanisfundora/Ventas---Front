@@ -84,25 +84,25 @@ const routes = [
                 path: '/FlujoCaja',
                 name: 'FlujoCaja',
                 component: () => import('src/pages/maia/CashFlowPage.vue'),
-                meta: { permission: ['finanzas.ver', 'finanzas.editar'] }
+                meta: { feature: 'finance', permission: ['finanzas.ver', 'finanzas.editar'] }
             },
             {
                 path: '/PagosProgramados',
                 name: 'PagosProgramados',
                 component: () => import('src/pages/maia/ScheduledPaymentsPage.vue'),
-                meta: { permission: ['finanzas.ver', 'finanzas.editar'] }
+                meta: { feature: 'finance', permission: ['finanzas.ver', 'finanzas.editar'] }
             },
             {
                 path: '/Bolsillos',
                 name: 'Bolsillos',
                 component: () => import('src/pages/maia/CashFundsPage.vue'),
-                meta: { permission: ['finanzas.ver', 'finanzas.editar'] }
+                meta: { feature: 'finance', permission: ['finanzas.ver', 'finanzas.editar'] }
             },
             {
                 path: '/ActivosFijos',
                 name: 'ActivosFijos',
                 component: () => import('src/pages/maia/FixedAssetsPage.vue'),
-                meta: { permission: ['activos.ver', 'activos.editar'] }
+                meta: { feature: 'finance', permission: ['activos.ver', 'activos.editar'] }
             },
             {
                 path: '/ConceptosGasto',

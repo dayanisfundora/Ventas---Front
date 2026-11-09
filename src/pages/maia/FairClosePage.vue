@@ -332,6 +332,7 @@ import { useFairStore } from 'src/stores/fair-store'
 import { Success } from 'src/assets/js/util/notify'
 import { money, formatDate, weekday, notifyApiError, downloadFile } from 'src/assets/js/util/maia'
 import { CURRENCIES, FUND_ROLES } from 'src/assets/js/util/finance'
+import { featureEnabled } from 'src/assets/js/util/features'
 
 const $q = useQuasar()
 const authStore = useAuthStore()
@@ -521,7 +522,7 @@ const distTotal = computed(() => distLines.value.filter((l) => l.currency === 'C
 const distValid = computed(() => distLines.value.length > 0 && distLines.value.every((l) => l.cash_fund_id && Number(l.amount) > 0))
 
 const loadDistribution = async () => {
-    if (!closed.value || !can('finanzas.ver')) {
+    if (!featureEnabled('finance') || !closed.value || !can('finanzas.ver')) {
         distribution.value = null
         return
     }
