@@ -108,13 +108,13 @@ const routes = [
                 path: '/ConceptosGasto',
                 name: 'ConceptosGasto',
                 component: () => import('src/pages/maia/ExpenseCategoriesPage.vue'),
-                meta: { permission: ['cierre_feria.ver', 'cierre_feria.editar'] }
+                meta: { permission: ['conceptos_gasto.ver', 'conceptos_gasto.crear', 'conceptos_gasto.editar'] }
             },
             {
                 path: '/Presupuestos',
                 name: 'Presupuestos',
                 component: () => import('src/pages/maia/BudgetConceptsPage.vue'),
-                meta: { permission: ['cierre_feria.ver', 'cierre_feria.editar'] }
+                meta: { permission: ['presupuestos.ver', 'presupuestos.crear', 'presupuestos.editar'] }
             },
             {
                 path: '/Reportes',
@@ -153,7 +153,8 @@ const routes = [
             {
                 path: '/Trazas',
                 name: 'Trazas',
-                component: () => import('src/pages/traces/TracePages.vue')
+                component: () => import('src/pages/traces/TracePages.vue'),
+                meta: { permission: ['trazas.ver'] }
             },
             {
                 path: '/Usuarios',

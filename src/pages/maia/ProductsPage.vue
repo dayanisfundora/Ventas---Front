@@ -1,6 +1,6 @@
 <template>
     <q-page class="maia-page">
-        <PageHeader title="Productos" section="Catálogo">
+        <PageHeader title="Productos" section="Configuración">
             <q-select dense outlined clearable emit-value map-options options-dense class="maia-field" style="min-width: 200px"
                 label="Categoría" :options="categoryOptions" v-model="categoryFilter" />
             <q-select dense outlined clearable emit-value map-options options-dense class="maia-field" style="min-width: 150px"
@@ -8,11 +8,11 @@
             <q-input dense outlined debounce="400" v-model="filter" placeholder="Código o nombre" class="maia-field">
                 <template #prepend><q-icon name="search" /></template>
             </q-input>
-            <q-btn v-if="fairStore.fairId && can('reportes.ver')" flat round color="primary" icon="download"
+            <q-btn v-if="fairStore.fairId && can('reportes.ver')" flat dense no-caps color="primary" icon="table_view" label="Excel"
                 @click="downloadFile(`Report/Catalog/${fairStore.fairId}/Excel`, {}, 'catalogo.xlsx')">
-                <q-tooltip>Exportar lista de precios (Excel)</q-tooltip>
+                <q-tooltip>Exportar hoja de productos (Excel)</q-tooltip>
             </q-btn>
-            <q-btn v-if="can('productos.crear')" outline no-caps color="primary" icon="upload_file" label="Importar"
+            <q-btn v-if="can('productos.crear')" flat dense no-caps color="primary" icon="upload_file" label="Importar"
                 @click="importDialog = true">
                 <q-tooltip>Importar productos desde Excel</q-tooltip>
             </q-btn>

@@ -13,10 +13,10 @@
                 @click="posMode === 'edit' ? closeEdit() : leaveSubview()" />
         </PageHeader>
 
-        <q-banner v-if="!fairStore.dayId" class="maia-card bg-orange-1 text-orange-9 q-mb-md" rounded>
+        <q-banner v-if="!fairStore.dayId" class="maia-card maia-banner--warning q-mb-md" rounded>
             Seleccione una feria y un día para vender.
         </q-banner>
-        <q-banner v-else-if="fairStore.isDayClosed" class="maia-card bg-grey-3 q-mb-md" rounded>
+        <q-banner v-else-if="fairStore.isDayClosed" class="maia-card maia-banner--muted q-mb-md" rounded>
             <template #avatar><q-icon name="lock" /></template>
             El día seleccionado está cerrado. Solo se pueden consultar sus ventas.
         </q-banner>
@@ -195,16 +195,38 @@
                                         @click="payments.splice(i, 1)" />
                                 </div>
                             </div>
+                            <div v-if="showChange" class="pos-change q-mb-sm">
+                                <q-toggle dense :model-value="change.enabled" label="Vuelto"
+                                    @update:model-value="(v) => setChangeEnabled(change, v, payments, total)">
+                                    <q-tooltip>Se devolvió dinero al cliente (por ejemplo, pagó en USD y se le dio el vuelto en CUP)</q-tooltip>
+                                </q-toggle>
+                                <div v-if="change.enabled" class="pos-pay-row q-mt-xs">
+                                    <q-select class="pos-field pos-pay-method" dense outlined emit-value map-options options-dense
+                                        :options="cashMethodOptions" v-model="change.payment_method_id" hide-bottom-space />
+                                    <q-input class="pos-field pos-amount-input pos-pay-amount" dense outlined type="number" step="0.01" min="0"
+                                        v-model.number="change.amount" :suffix="methodCurrency(change.payment_method_id)"
+                                        input-class="text-right" hide-bottom-space />
+                                    <div class="pos-pay-actions row no-wrap items-center">
+                                        <q-btn flat round dense size="sm" icon="bolt" color="primary" @click="fillChange(change, payments, total)">
+                                            <q-tooltip>Todo lo que sobra, como vuelto</q-tooltip>
+                                        </q-btn>
+                                    </div>
+                                </div>
+                            </div>
                             <div class="pos-pay-check text-body2" :class="payCheckClass">
                                 <div>
                                     Total {{ money(total) }} CUP · Pagado {{ paidDisplay }}
-                                    <template v-if="showPaidCupEquiv"> = <b>{{ money(paidCup) }} CUP</b></template>
+                                    <template v-if="showPaidCupEquiv"> = <b>{{ money(receivedCup) }} CUP</b></template>
+                                    <template v-if="changeRows(change).length">
+                                        · Vuelto <b>{{ money(change.amount) }} {{ methodCurrency(change.payment_method_id) }}</b>
+                                    </template>
                                 </div>
                                 <div v-if="remainingCup > 0.009" class="text-right">
                                     Falta <b>{{ balanceDisplay(remainingCup) }}</b>
                                 </div>
                                 <div v-else-if="tipFromExcess" class="text-right">
-                                    A propina <b>{{ money(tipFromExcess.amount) }} {{ tipFromExcess.currency }}</b>
+                                    <template v-if="excessIsSale">Cobrado de más <b>{{ money(paidCup - total) }} CUP</b></template>
+                                    <template v-else>A propina <b>{{ money(tipFromExcess.amount) }} {{ tipFromExcess.currency }}</b></template>
                                 </div>
                                 <div v-else-if="total > 0" class="text-right"><b>Exacto</b></div>
                             </div>
@@ -219,11 +241,14 @@
                         <q-separator />
                         <q-card-section class="q-py-sm">
                             <div class="row items-center no-wrap q-gutter-sm">
-                                <q-toggle dense v-model="withTip" label="Propina" />
+                                <q-toggle dense :model-value="withTip" label="Propina" @update:model-value="setWithTip" />
                                 <q-space />
                                 <q-input v-if="withTip" class="col pos-field pos-amount-input" style="max-width: 168px" dense outlined
                                     type="number" step="0.01" min="0" v-model.number="tip.amount"
                                     :suffix="methodCurrency(tip.payment_method_id) || 'CUP'" input-class="text-right" hide-bottom-space />
+                            </div>
+                            <div v-if="tipFromExcess && excessIsSale" class="text-caption text-grey-7 q-mt-xs">
+                                Sin propina: la venta se registra por {{ money(paidCup) }} CUP (se vendió por más del precio).
                             </div>
                             <div v-if="withTip" class="pos-tip-row q-mt-sm">
                                 <q-select class="pos-field" dense outlined emit-value map-options options-dense
@@ -256,13 +281,69 @@
                         <div class="text-caption text-grey-7">{{ formatDate(fairStore.day?.date) }}</div>
                     </div>
                     <q-space />
+                    <div class="pos-sales-total text-right q-mr-lg">
+                        <div class="text-caption text-grey-7">Cantidad vendida</div>
+                        <div class="text-h6 text-weight-bold">{{ salesUnits }}</div>
+                        <div class="text-caption text-grey-7">{{ salesCount }} {{ salesCount === 1 ? 'venta' : 'ventas' }}</div>
+                    </div>
                     <div class="pos-sales-total text-right">
                         <div class="text-caption text-grey-7">Total del día</div>
-                        <div class="text-h6 text-weight-bold text-primary">{{ money(salesTotal) }} <span class="text-caption">CUP</span></div>
+                        <div class="pos-sales-total__amounts text-h6 text-weight-bold text-primary">
+                            <span v-for="(c, i) in salesCurrencyTotals" :key="c.currency">
+                                <span v-if="i" class="pos-sales-total__plus">+</span>
+                                {{ money(c.amount) }} <span class="text-caption">{{ c.currency }}</span>
+                            </span>
+                        </div>
+                        <div v-if="salesCurrencyTotals.some((c) => c.currency !== 'CUP')" class="text-caption text-grey-7">
+                            = {{ money(salesTotal) }} CUP
+                        </div>
                     </div>
                     <q-btn flat round dense icon="refresh" color="primary" class="q-ml-sm" :loading="salesLoading" @click="loadSales">
                         <q-tooltip>Actualizar</q-tooltip>
                     </q-btn>
+                </q-card-section>
+                <q-card-section v-if="salesPayBreakdown.length" class="pos-sales-pays q-pt-none q-pb-sm">
+                    <div class="pos-sales-pays__grid">
+                        <button
+                            v-for="row in salesPayBreakdown"
+                            :key="row.key"
+                            type="button"
+                            class="pos-sales-pay"
+                            :class="{ 'pos-sales-pay--active': salesPayFilter === row.key }"
+                            @click="salesPayFilter = salesPayFilter === row.key ? null : row.key"
+                        >
+                            <div class="text-caption text-grey-7">{{ row.label }}</div>
+                            <div class="text-weight-bold">{{ money(row.amount) }} <span class="text-caption">{{ row.currency }}</span></div>
+                            <div v-if="row.currency !== 'CUP'" class="text-caption text-grey-7">= {{ money(row.amount_cup) }} CUP</div>
+                        </button>
+                    </div>
+                </q-card-section>
+                <q-separator />
+                <q-card-section class="row items-center q-py-sm q-col-gutter-sm">
+                    <div class="col-12 col-sm">
+                        <q-input v-model="salesSearch" dense outlined clearable debounce="150" placeholder="Buscar por producto o código">
+                            <template #prepend><q-icon name="search" /></template>
+                        </q-input>
+                    </div>
+                    <div class="col-12 col-sm-5 col-md-4">
+                        <q-select
+                            v-model="salesPayFilter"
+                            dense outlined clearable emit-value map-options options-dense
+                            :options="salesPayFilterOptions"
+                            label="Forma de pago"
+                            placeholder="Todas"
+                        />
+                    </div>
+                    <div v-if="salesSearchTerm || salesPayFilter" class="col-12 text-caption text-grey-7">
+                        <template v-if="salesSearchTerm">
+                            <b class="text-body2 text-weight-bold">{{ salesSearchUnits }}</b> {{ salesSearchUnits === 1 ? 'unidad' : 'unidades' }}
+                            del producto · {{ money(salesSearchAmount) }} CUP
+                            <span v-if="salesPayFilter"> · </span>
+                        </template>
+                        <template v-if="salesPayFilter || salesSearchTerm">
+                            {{ salesFilterCount }} {{ salesFilterCount === 1 ? 'venta' : 'ventas' }}
+                        </template>
+                    </div>
                 </q-card-section>
                 <q-separator />
                 <q-card-section class="pos-subview__body q-pa-none">
@@ -270,8 +351,19 @@
                     <div v-if="!salesLoading && !sales.length" class="text-center text-grey q-pa-xl">
                         Sin ventas en este día.
                     </div>
+                    <div v-else-if="!salesLoading && !filteredSales.length" class="text-center text-grey q-pa-xl">
+                        <template v-if="salesSearchTerm && salesPayFilter">
+                            Ninguna venta coincide con «{{ salesSearch }}» y {{ salesPayFilterLabel }}.
+                        </template>
+                        <template v-else-if="salesPayFilter">
+                            Ninguna venta se cobró con {{ salesPayFilterLabel }}.
+                        </template>
+                        <template v-else>
+                            Ninguna venta tiene un producto que coincida con «{{ salesSearch }}».
+                        </template>
+                    </div>
                     <div v-else class="pos-sales-list">
-                        <div v-for="sale in sales" :key="sale.id" class="pos-sale-row"
+                        <div v-for="sale in filteredSales" :key="sale.id" class="pos-sale-row"
                             :class="{ 'pos-sale-row--void': sale.status !== 'completed' }">
                             <div class="pos-sale-row__main">
                                 <div class="pos-sale-row__id">
@@ -284,21 +376,35 @@
                                 <div class="pos-sale-row__items text-caption">
                                     <span v-for="(it, idx) in sale.items" :key="it.id">
                                         <span v-if="idx"> · </span>
-                                        <b>{{ it.product?.code || '—' }}</b> {{ it.quantity }}× {{ it.product?.name }}
+                                        <span :class="{ 'text-primary text-weight-bold': salesSearchTerm && itemMatches(it) }">
+                                            <b>{{ it.product?.code || '—' }}</b> {{ it.quantity }}× {{ it.product?.name }}
+                                        </span>
                                     </span>
                                 </div>
                                 <div class="pos-sale-row__pays text-caption text-grey-7">
                                     <span v-for="(py, idx) in sale.payments.filter((p) => Number(p.amount) > 0)" :key="py.id">
-                                        <span v-if="idx"> · </span>{{ py.payment_method?.name }} {{ money(py.amount) }} {{ py.payment_method?.currency }}
+                                        <span v-if="idx"> · </span>{{ py.payment_method?.name }}
+                                        <span class="pos-sale-row__pay-amount">{{ money(py.amount) }} {{ py.payment_method?.currency }}</span>
+                                    </span>
+                                    <span v-for="py in sale.payments.filter((p) => Number(p.amount) < 0)" :key="`c${py.id}`">
+                                        · Vuelto <span class="pos-sale-row__pay-amount">{{ money(-py.amount) }} {{ py.payment_method?.currency }}</span>
                                     </span>
                                     <span v-for="t in sale.tips" :key="`t${t.id}`" class="text-teal">
-                                        · Propina {{ money(t.amount_cup) }} CUP
+                                        · Propina <b>{{ money(t.amount_cup) }} CUP</b>
                                     </span>
                                 </div>
                             </div>
                             <div class="pos-sale-row__side">
-                                <div class="pos-sale-row__amount text-weight-bold" :class="sale.status === 'completed' ? 'text-dark' : 'text-grey'">
-                                    {{ money(sale.total_cup) }} <span class="text-caption">CUP</span>
+                                <div class="pos-sale-row__amount text-weight-bold" :class="sale.status === 'completed' ? 'pos-sale-row__amount--done' : 'text-grey'">
+                                    <template v-if="saleIsForeign(sale)">
+                                        <div v-for="c in saleCurrencyTotals(sale)" :key="c.currency">
+                                            {{ money(c.amount) }} <span class="text-caption">{{ c.currency }}</span>
+                                        </div>
+                                    </template>
+                                    <template v-else>{{ money(sale.total_cup) }} <span class="text-caption">CUP</span></template>
+                                </div>
+                                <div v-if="saleIsForeign(sale)" class="text-caption text-grey-7">
+                                    = {{ money(sale.total_cup) }} CUP
                                 </div>
                                 <div v-if="sale.status === 'completed' && !fairStore.isDayClosed" class="row no-wrap q-gutter-xs justify-end">
                                     <q-btn v-if="can('pos.vender')" flat round dense color="primary" icon="edit" @click="openEditSale(sale)">
@@ -354,7 +460,8 @@
                                         @click="changeEditQty(line, 1)" />
                                 </div>
                                 <q-input class="maia-field edit-sale-price" dense outlined type="number" step="0.01" min="0"
-                                    v-model.number="line.unit_price" suffix="CUP" input-class="text-right" hide-bottom-space />
+                                    v-model.number="line.unit_price" suffix="CUP" input-class="text-right" hide-bottom-space
+                                    @update:model-value="syncEditLineTotal(line)" />
                                 <q-btn flat round dense size="sm" color="negative" icon="close" @click="removeEditLine(line)" />
                             </div>
                             <div v-if="!editCart.length" class="text-caption text-grey q-pa-sm">Agregue al menos un producto</div>
@@ -376,16 +483,44 @@
                             <q-btn flat round dense icon="close" color="negative" :disable="editPayments.length === 1"
                                 @click="editPayments.splice(i, 1)" />
                         </div>
-                        <div class="text-caption"
-                            :class="editRemaining > 0.009 ? 'text-negative' : editTipFromExcess ? 'text-positive' : 'text-grey-7'">
-                            Pagado {{ money(editPaidCup) }} CUP
-                            <span v-if="editRemaining > 0.009"> · Falta {{ money(editRemaining) }}</span>
-                            <span v-else-if="editTipFromExcess"> · A propina {{ money(editTipFromExcess.amount) }} {{ editTipFromExcess.currency }}</span>
+                        <div v-if="editShowChange">
+                            <q-toggle dense :model-value="editChange.enabled" label="Vuelto"
+                                @update:model-value="(v) => setChangeEnabled(editChange, v, editPayments, editTotal)" />
+                            <div v-if="editChange.enabled" class="edit-sale-pay q-mt-xs">
+                                <q-select class="maia-field edit-sale-pay__method" dense outlined emit-value map-options options-dense
+                                    :options="cashMethodOptions" v-model="editChange.payment_method_id" hide-bottom-space />
+                                <q-input class="maia-field edit-sale-pay__amount" dense outlined type="number" step="0.01" min="0"
+                                    v-model.number="editChange.amount" :suffix="methodCurrency(editChange.payment_method_id)"
+                                    input-class="text-right" hide-bottom-space />
+                                <q-btn flat round dense icon="bolt" color="primary" @click="fillChange(editChange, editPayments, editTotal)">
+                                    <q-tooltip>Todo lo que sobra, como vuelto</q-tooltip>
+                                </q-btn>
+                            </div>
+                        </div>
+                        <div class="pos-pay-check text-body2" :class="editPayCheckClass">
+                            <div>
+                                Total {{ money(editTotal) }} CUP · Pagado {{ editPaidDisplay }}
+                                <template v-if="editShowPaidCupEquiv"> = <b>{{ money(editReceivedCup) }} CUP</b></template>
+                                <template v-if="changeRows(editChange).length">
+                                    · Vuelto <b>{{ money(editChange.amount) }} {{ methodCurrency(editChange.payment_method_id) }}</b>
+                                </template>
+                            </div>
+                            <div v-if="editRemaining > 0.009" class="text-right">
+                                Falta <b>{{ money(editRemaining) }} CUP</b>
+                            </div>
+                            <div v-else-if="editTipFromExcess" class="text-right">
+                                <template v-if="editExcessIsSale">Cobrado de más <b>{{ money(editPaidCup - editTotal) }} CUP</b></template>
+                                <template v-else>A propina <b>{{ money(editTipFromExcess.amount) }} {{ editTipFromExcess.currency }}</b></template>
+                            </div>
+                            <div v-else-if="editTotal > 0" class="text-right"><b>Exacto</b></div>
                         </div>
                     </div>
 
+                    <div v-if="editTipFromExcess && editExcessIsSale" class="text-caption text-grey-7">
+                        Sin propina: la venta se registra por {{ money(editPaidCup) }} CUP (se vendió por más del precio).
+                    </div>
                     <div class="edit-sale-tip">
-                        <q-toggle dense v-model="editWithTip" label="Propina" />
+                        <q-toggle dense :model-value="editWithTip" label="Propina" @update:model-value="setEditWithTip" />
                         <template v-if="editWithTip">
                             <q-input class="maia-field edit-sale-pay__amount" dense outlined type="number" step="0.01" min="0"
                                 v-model.number="editTip.amount" :suffix="methodCurrency(editTip.payment_method_id) || 'CUP'"
@@ -426,10 +561,10 @@
                             style="display: none" @change="onScanFileChosen" />
                     </div>
                 </q-card-section>
-                <q-banner v-if="scanUnavailable" dense class="bg-orange-1 text-orange-10 q-mx-md" rounded>
+                <q-banner v-if="scanUnavailable" dense class="maia-banner--warning q-mx-md" rounded>
                     Tesseract OCR no está instalado en este servidor. Consulte <code>Back/docs/POS_SCAN_HOJA.md</code>.
                 </q-banner>
-                <q-banner v-for="(w, i) in scanWarnings" :key="i" dense class="bg-grey-2 text-grey-9 q-mx-md q-mt-sm" rounded>
+                <q-banner v-for="(w, i) in scanWarnings" :key="i" dense class="maia-banner--muted q-mx-md q-mt-sm" rounded>
                     {{ w }}
                 </q-banner>
                 <q-separator />
@@ -566,7 +701,10 @@ const activeFilterSummary = computed(() => {
 
 const cart = ref([])
 const payments = ref([])
-const withTip = ref(true)
+const withTip = ref(false)
+/** Tip turned on by a surplus (not by hand): it turns off again when the surplus goes away. */
+const tipFromSurplus = ref(false)
+const excessIsSale = ref(false)
 const tip = reactive({ worker_id: null, payment_method_id: null, amount: null })
 const notes = ref('')
 const saving = ref(false)
@@ -642,25 +780,69 @@ const total = computed(() => cart.value.reduce((s, l) => s + l.quantity * Number
 /* ---------- Payments ---------- */
 const round2 = (v) => Math.round(v * 100) / 100
 const paymentCup = (p) => Number(p.amount || 0) * rate(methodCurrency(p.payment_method_id))
-const paidCup = computed(() => payments.value.reduce((s, p) => s + paymentCup(p), 0))
+
+/* Change handed back in cash, e.g. paid 20 USD and got CUP back. Sent as its own field; stored as a negative payment. */
+const cashMethodOptions = computed(() => methods.value.filter((m) => m.kind === 'cash').map((m) => ({ label: m.name, value: m.id })))
+const emptyChange = () => ({ enabled: false, payment_method_id: null, amount: null })
+const changeRows = (c) => (c.enabled && c.payment_method_id && Number(c.amount) > 0
+    ? [{ payment_method_id: c.payment_method_id, amount: -Number(c.amount) }]
+    : [])
+const changePayload = (c) => {
+    const [row] = changeRows(c)
+    return row ? { payment_method_id: row.payment_method_id, amount: -row.amount } : null
+}
+const receivedCupOf = (list) => list.reduce((s, p) => s + paymentCup(p), 0)
+/** Whole surplus as change, in the change currency (foreign rounded down so it never gives too much). */
+const fillChange = (c, list, totalCup) => {
+    c.payment_method_id ||= cashCup.value?.id || cashMethodOptions.value[0]?.value || null
+    const surplus = Math.max(0, receivedCupOf(list) - totalCup)
+    const r = rate(methodCurrency(c.payment_method_id))
+    c.amount = surplus > 0 ? (r === 1 ? round2(surplus) : Math.floor((surplus / r) * 100) / 100) : null
+}
+const setChangeEnabled = (c, value, list, totalCup) => {
+    c.enabled = value
+    if (value && !(Number(c.amount) > 0)) fillChange(c, list, totalCup)
+}
+
+const change = reactive(emptyChange())
+const payList = computed(() => [...payments.value, ...changeRows(change)])
+const receivedCup = computed(() => receivedCupOf(payments.value))
+const showChange = computed(() => change.enabled || receivedCup.value - total.value > 0.009)
+const paidCup = computed(() => payList.value.reduce((s, p) => s + paymentCup(p), 0))
 const remainingCup = computed(() => Math.max(0, total.value - paidCup.value))
 
 /** Amounts grouped by the currency actually entered (not converted to CUP). */
-const paidByCurrency = computed(() => {
+const paidByCurrencyOf = (list) => {
     const map = new Map()
-    for (const p of payments.value) {
+    for (const p of list) {
         const amount = Number(p.amount || 0)
         if (amount <= 0) continue
         const currency = methodCurrency(p.payment_method_id) || 'CUP'
         map.set(currency, round2((map.get(currency) || 0) + amount))
     }
     return [...map.entries()].map(([currency, amount]) => ({ currency, amount }))
-})
+}
+const formatPaid = (rows) => (rows.length
+    ? rows.map(({ currency, amount }) => `${money(amount)} ${currency}`).join(' + ')
+    : `${money(0)} CUP`)
 
-const paidDisplay = computed(() => {
-    if (!paidByCurrency.value.length) return `${money(0)} CUP`
-    return paidByCurrency.value.map(({ currency, amount }) => `${money(amount)} ${currency}`).join(' + ')
-})
+/** What a sale left in each currency (payments are net of the tip; change counts as money out). */
+const saleCurrencyTotals = (sale) => {
+    const map = new Map()
+    for (const p of sale.payments || []) {
+        const amount = Number(p.amount || 0)
+        if (!amount) continue
+        const currency = p.payment_method?.currency || methodCurrency(p.payment_method_id) || 'CUP'
+        map.set(currency, round2((map.get(currency) || 0) + amount))
+    }
+    return [...map.entries()]
+        .filter(([, amount]) => Math.abs(amount) > 0.004)
+        .map(([currency, amount]) => ({ currency, amount }))
+}
+const saleIsForeign = (sale) => saleCurrencyTotals(sale).some((c) => c.currency !== 'CUP')
+
+const paidByCurrency = computed(() => paidByCurrencyOf(payments.value))
+const paidDisplay = computed(() => formatPaid(paidByCurrency.value))
 
 /** Show "= X CUP" when any payment is not CUP (so 500 CUP + 5 USD is clear). */
 const showPaidCupEquiv = computed(() => paidByCurrency.value.some((r) => r.currency !== 'CUP'))
@@ -678,15 +860,15 @@ const mixedPayRates = computed(() => {
  * @returns {{ payment_method_id: number|null, currency: string, amount: number }|null}
  */
 const excessTip = (list, totalCup) => {
-    const paid = list.filter((p) => p.payment_method_id && Number(p.amount) > 0)
+    const paid = list.filter((p) => p.payment_method_id && Number(p.amount) !== 0)
     const isCup = (p) => (methodCurrency(p.payment_method_id) || 'CUP') === 'CUP'
     const allCup = paid.reduce((s, p) => s + paymentCup(p), 0)
     const excess = round2(allCup - totalCup)
     if (excess < 0.01) return null
     const cupOnly = paid.filter(isCup).reduce((s, p) => s + Number(p.amount), 0)
     const foreignOvershoot = round2(Math.max(0, allCup - cupOnly) - Math.max(0, totalCup - cupOnly))
-    if (foreignOvershoot > 0.009) {
-        const pay = [...paid].reverse().find((p) => !isCup(p))
+    const pay = [...paid].reverse().find((p) => !isCup(p) && Number(p.amount) > 0)
+    if (foreignOvershoot > 0.009 && pay) {
         const currency = methodCurrency(pay.payment_method_id)
         return {
             payment_method_id: pay.payment_method_id,
@@ -695,13 +877,13 @@ const excessTip = (list, totalCup) => {
         }
     }
     return {
-        payment_method_id: cashCup.value?.id || paid.find(isCup)?.payment_method_id || null,
+        payment_method_id: cashCup.value?.id || paid.find((p) => isCup(p) && Number(p.amount) > 0)?.payment_method_id || null,
         currency: 'CUP',
         amount: excess,
     }
 }
 
-const tipFromExcess = computed(() => excessTip(payments.value, total.value))
+const tipFromExcess = computed(() => excessTip(payList.value, total.value))
 
 const payCheckClass = computed(() => {
     if (!(total.value > 0) || !(paidCup.value > 0)) return 'text-grey-8'
@@ -736,35 +918,52 @@ const applyExcessAsTip = () => {
     syncTipFromSeller()
     const plan = tipFromExcess.value
     if (!plan) {
-        tip.amount = null
-        tip.payment_method_id = cashCup.value?.id || tip.payment_method_id
+        excessIsSale.value = false
+        if (tipFromSurplus.value) {
+            withTip.value = false
+            tipFromSurplus.value = false
+            tip.amount = null
+            tip.payment_method_id = cashCup.value?.id || tip.payment_method_id
+        }
         return
     }
-    // Surplus stays in the overshoot currency; turn tip on so Cobrar can proceed.
+    if (excessIsSale.value) return
+    // Surplus stays in the overshoot currency; it goes to tip unless the cashier turns tip off.
+    if (!withTip.value) tipFromSurplus.value = true
     withTip.value = true
     tip.payment_method_id = plan.payment_method_id || cashCup.value?.id || tip.payment_method_id
     tip.amount = plan.amount
 }
 
+/** Turning tip off while there is a surplus means the item was sold for more than its price. */
+const setWithTip = (value) => {
+    withTip.value = value
+    tipFromSurplus.value = false
+    excessIsSale.value = !value && !!tipFromExcess.value
+    if (value) applyExcessAsTip()
+    else tip.amount = null
+}
+
 watch(workerId, () => syncTipFromSeller())
-watch([tipFromExcess, withTip, paidCup], () => applyExcessAsTip())
+watch([tipFromExcess, paidCup], () => applyExcessAsTip())
 
 const addPayment = (methodId = null) => {
     payments.value.push({ payment_method_id: methodId || cashCup.value?.id || methods.value[0]?.id, amount: null })
 }
 
 const fillRemaining = (p) => {
-    const others = payments.value.filter((x) => x !== p).reduce((s, x) => s + paymentCup(x), 0)
+    const others = payList.value.filter((x) => x !== p).reduce((s, x) => s + paymentCup(x), 0)
     const missing = Math.max(0, total.value - others)
     const r = rate(methodCurrency(p.payment_method_id))
     p.amount = r === 1 ? round2(missing) : Math.ceil((missing / r) * 100) / 100
 }
 
 const canCharge = computed(() => {
-    if (fairStore.isDayClosed || !fairStore.dayId || !cart.value.length || remainingCup.value >= 0.01 || !can('pos.vender')) {
+    // Paying less than the total is allowed after confirmation (sold for less)
+    if (fairStore.isDayClosed || !fairStore.dayId || !cart.value.length || !(paidCup.value > 0) || !can('pos.vender')) {
         return false
     }
-    if (tipFromExcess.value) {
+    if (tipFromExcess.value && !excessIsSale.value) {
         if (!workerId.value && !tip.worker_id) return false
     }
     return true
@@ -774,7 +973,10 @@ const resetSale = () => {
     cart.value = []
     payments.value = []
     addPayment()
-    withTip.value = true
+    Object.assign(change, emptyChange())
+    withTip.value = false
+    tipFromSurplus.value = false
+    excessIsSale.value = false
     Object.assign(tip, {
         worker_id: workerId.value || null,
         payment_method_id: cashCup.value?.id || methods.value[0]?.id || null,
@@ -783,8 +985,24 @@ const resetSale = () => {
     notes.value = ''
 }
 
+const confirmUnderpayment = (totalCup, paid) => new Promise((resolve) => {
+    $q.dialog({
+        title: 'Se cobró por menos',
+        message: `El total es <b>${money(totalCup)} CUP</b> y se cobró <b>${money(paid)} CUP</b>`
+            + ` (faltan <b>${money(totalCup - paid)} CUP</b>).<br><br>`
+            + 'La venta se registrará por lo cobrado: el precio de los productos se rebaja en proporción'
+            + ' y queda anotado en la venta. ¿Desea continuar?',
+        html: true,
+        cancel: { label: 'Revisar el pago', flat: true, noCaps: true },
+        ok: { label: `Registrar por ${money(paid)} CUP`, color: 'warning', textColor: 'dark', unelevated: true, noCaps: true },
+        persistent: true,
+    }).onOk(() => resolve(true)).onCancel(() => resolve(false))
+})
+
 const charge = async () => {
     if (!canCharge.value || saving.value) return
+    const underpaid = remainingCup.value >= 0.01
+    if (underpaid && !(await confirmUnderpayment(total.value, paidCup.value))) return
     applyExcessAsTip()
     const validPayments = payments.value.filter((p) => p.payment_method_id && Number(p.amount) > 0)
     const payload = {
@@ -793,15 +1011,22 @@ const charge = async () => {
         notes: notes.value || null,
         items: cart.value.map((l) => ({ product_id: l.product.id, quantity: l.quantity })),
         payments: validPayments.map((p) => ({ payment_method_id: p.payment_method_id, amount: Number(p.amount) })),
+        change: changePayload(change),
     }
-    if (withTip.value && Number(tip.amount) > 0) {
+    if (underpaid) payload.accept_underpayment = true
+    const soldForMore = excessIsSale.value && !!tipFromExcess.value
+    if (soldForMore) {
+        payload.accept_overpayment = true
+    } else if (withTip.value && Number(tip.amount) > 0) {
         payload.tip = {
             worker_id: tip.worker_id || workerId.value || null,
             payment_method_id: tip.payment_method_id || cashCup.value?.id,
             amount: Number(tip.amount),
         }
     }
-    const tipMsg = Number(tip.amount) > 0 ? ` Propina: ${money(Number(tip.amount))} ${methodCurrency(tip.payment_method_id) || 'CUP'}` : ''
+    const tipMsg = soldForMore
+        ? ` Vendida por ${money(paidCup.value)} CUP.`
+        : (payload.tip ? ` Propina: ${money(payload.tip.amount)} ${methodCurrency(payload.tip.payment_method_id) || 'CUP'}` : '')
     saving.value = true
     try {
         const { data } = await api.post('Sale/Create', payload)
@@ -819,7 +1044,9 @@ const charge = async () => {
 
 const clearSellerAndTip = () => {
     workerId.value = null
-    withTip.value = true
+    withTip.value = false
+    tipFromSurplus.value = false
+    excessIsSale.value = false
     Object.assign(tip, {
         worker_id: null,
         payment_method_id: cashCup.value?.id || methods.value[0]?.id || null,
@@ -864,8 +1091,94 @@ const reload = async () => {
 const posMode = ref('sell') // sell | sales | edit | scan
 const sales = ref([])
 const salesLoading = ref(false)
-const salesTotal = computed(() => sales.value.filter((s) => s.status === 'completed').reduce((t, s) => t + Number(s.total_cup), 0))
+const completedSales = computed(() => sales.value.filter((s) => s.status === 'completed'))
+const salesTotal = computed(() => completedSales.value.reduce((t, s) => t + Number(s.total_cup), 0))
+const salesCount = computed(() => completedSales.value.length)
+const salesUnits = computed(() => completedSales.value
+    .reduce((t, s) => t + (s.items || []).reduce((u, it) => u + Number(it.quantity || 0), 0), 0))
+const salesCurrencyTotals = computed(() => {
+    const map = new Map()
+    for (const sale of sales.value) {
+        if (sale.status !== 'completed') continue
+        for (const c of saleCurrencyTotals(sale)) map.set(c.currency, round2((map.get(c.currency) || 0) + c.amount))
+    }
+    const rows = [...map.entries()].map(([currency, amount]) => ({ currency, amount }))
+    rows.sort((a, b) => (a.currency === 'CUP' ? -1 : b.currency === 'CUP' ? 1 : a.currency.localeCompare(b.currency)))
+    return rows.length ? rows : [{ currency: 'CUP', amount: 0 }]
+})
 const saleTime = (sale) => new Date(sale.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+
+const salesSearch = ref('')
+const salesPayFilter = ref(null)
+const salesSearchTerm = computed(() => normalize(salesSearch.value).trim())
+
+const salePayMeta = (payment) => {
+    const fromSale = payment.payment_method || {}
+    const fromCatalog = methodById(payment.payment_method_id) || {}
+    const id = payment.payment_method_id || fromSale.id || fromCatalog.id
+    const kind = fromCatalog.kind || fromSale.kind || 'cash'
+    const currency = fromSale.currency || fromCatalog.currency || 'CUP'
+    const name = fromSale.name || fromCatalog.name || (kind === 'transfer' ? 'Transferencia' : `Efectivo ${currency}`)
+    return {
+        key: String(id || `${kind}:${currency}`),
+        id,
+        kind,
+        currency,
+        label: name,
+        sort: kind === 'cash' ? 0 : 1,
+    }
+}
+const saleHasPay = (sale, key) => (sale.payments || []).some((p) => Number(p.amount) > 0 && salePayMeta(p).key === key)
+
+const salesPayBreakdown = computed(() => {
+    const map = new Map()
+    for (const sale of completedSales.value) {
+        for (const p of sale.payments || []) {
+            const amount = Number(p.amount || 0)
+            if (amount <= 0) continue
+            const meta = salePayMeta(p)
+            const row = map.get(meta.key) || {
+                key: meta.key,
+                label: meta.label,
+                kind: meta.kind,
+                currency: meta.currency,
+                sort: meta.sort,
+                amount: 0,
+                amount_cup: 0,
+            }
+            row.amount = round2(row.amount + amount)
+            row.amount_cup = round2(row.amount_cup + amount * rate(meta.currency))
+            map.set(meta.key, row)
+        }
+    }
+    return [...map.values()].sort((a, b) => {
+        if (a.sort !== b.sort) return a.sort - b.sort
+        if (a.currency === 'CUP' && b.currency !== 'CUP') return -1
+        if (b.currency === 'CUP' && a.currency !== 'CUP') return 1
+        return a.label.localeCompare(b.label, 'es')
+    })
+})
+const salesPayFilterOptions = computed(() => salesPayBreakdown.value.map((r) => ({
+    label: `${r.label} · ${money(r.amount)} ${r.currency}`,
+    value: r.key,
+})))
+const salesPayFilterLabel = computed(() => salesPayBreakdown.value.find((r) => r.key === salesPayFilter.value)?.label || '')
+
+const itemMatches = (it) => {
+    const term = salesSearchTerm.value
+    return normalize(it.product?.code).includes(term) || normalize(it.product?.name).includes(term)
+}
+const filteredSales = computed(() => sales.value.filter((s) => {
+    if (salesPayFilter.value && !saleHasPay(s, salesPayFilter.value)) return false
+    if (salesSearchTerm.value && !(s.items || []).some(itemMatches)) return false
+    return true
+}))
+const matchedItems = computed(() => filteredSales.value
+    .filter((s) => s.status === 'completed')
+    .flatMap((s) => (s.items || []).filter((it) => !salesSearchTerm.value || itemMatches(it))))
+const salesFilterCount = computed(() => filteredSales.value.filter((s) => s.status === 'completed').length)
+const salesSearchUnits = computed(() => matchedItems.value.reduce((t, it) => t + Number(it.quantity || 0), 0))
+const salesSearchAmount = computed(() => matchedItems.value.reduce((t, it) => t + Number(it.subtotal_cup || 0), 0))
 
 const loadSales = async () => {
     if (!fairStore.dayId) {
@@ -885,6 +1198,8 @@ const loadSales = async () => {
 
 const openSales = () => {
     posMode.value = 'sales'
+    salesSearch.value = ''
+    salesPayFilter.value = null
     loadSales()
 }
 
@@ -1186,6 +1501,7 @@ const editPayments = ref([])
 const editWorkerId = ref(null)
 const editNotes = ref('')
 const editWithTip = ref(false)
+const editExcessIsSale = ref(false)
 const editTip = reactive({ worker_id: null, payment_method_id: null, amount: null })
 const editAddProductId = ref(null)
 
@@ -1200,14 +1516,57 @@ const editMaxQty = (line) => {
     return Math.max(1, stock + Number(editOriginalQty.value[line.product_id] || 0))
 }
 
-const editTotal = computed(() => editCart.value.reduce((s, l) => s + Number(l.quantity || 0) * Number(l.unit_price || 0), 0))
-const editPaidCup = computed(() => editPayments.value.reduce((s, p) => s + Number(p.amount || 0) * rate(methodCurrency(p.payment_method_id)), 0))
-const editRemaining = computed(() => Math.max(0, editTotal.value - editPaidCup.value))
-const editTipFromExcess = computed(() => excessTip(editPayments.value, editTotal.value))
+/** Line total is stored apart from unit×qty so cents that don't divide evenly (9500/3) don't invent +0.01. */
+const editLineTotal = (line) => (line.line_total != null
+    ? Number(line.line_total)
+    : round2(Number(line.quantity || 0) * Number(line.unit_price || 0)))
+const syncEditLineTotal = (line) => {
+    line.line_total = round2(Number(line.quantity || 0) * Number(line.unit_price || 0))
+}
+const editTotal = computed(() => round2(editCart.value.reduce((s, l) => s + editLineTotal(l), 0)))
+const editChange = reactive(emptyChange())
+const editPayList = computed(() => [...editPayments.value, ...changeRows(editChange)])
+const editReceivedCup = computed(() => receivedCupOf(editPayments.value))
+const editShowChange = computed(() => editChange.enabled || editReceivedCup.value - editTotal.value > 0.009)
+const editPaidCup = computed(() => round2(editPayList.value.reduce((s, p) => s + paymentCup(p), 0)))
+const editRemaining = computed(() => Math.max(0, round2(editTotal.value - editPaidCup.value)))
+const editTipFromExcess = computed(() => excessTip(editPayList.value, editTotal.value))
+const editPaidByCurrency = computed(() => paidByCurrencyOf(editPayments.value))
+const editPaidDisplay = computed(() => formatPaid(editPaidByCurrency.value))
+const editShowPaidCupEquiv = computed(() => editPaidByCurrency.value.some((r) => r.currency !== 'CUP'))
+const editPayCheckClass = computed(() => {
+    if (!(editTotal.value > 0) || !(editPaidCup.value > 0)) return 'text-grey-8'
+    return editRemaining.value > 0.009 ? 'text-negative' : 'text-positive'
+})
+
+const applyEditExcessAsTip = () => {
+    const plan = editTipFromExcess.value
+    if (!plan) {
+        editExcessIsSale.value = false
+        editWithTip.value = false
+        editTip.amount = null
+        return
+    }
+    if (editExcessIsSale.value) return
+    editWithTip.value = true
+    const keepMethod = editTip.payment_method_id && (methodCurrency(editTip.payment_method_id) || 'CUP') === plan.currency
+    if (!keepMethod) editTip.payment_method_id = plan.payment_method_id || cashCup.value?.id || editTip.payment_method_id
+    editTip.amount = plan.amount
+}
+
+const setEditWithTip = (value) => {
+    editWithTip.value = value
+    editExcessIsSale.value = !value && !!editTipFromExcess.value
+    if (value) applyEditExcessAsTip()
+}
+
+watch([editTipFromExcess, editPaidCup], () => {
+    if (posMode.value === 'edit') applyEditExcessAsTip()
+})
 
 const canSaveEdit = computed(() => {
-    if (!editCart.value.length || editRemaining.value >= 0.01 || editSaving.value) return false
-    if (editTipFromExcess.value) {
+    if (!editCart.value.length || !(editPaidCup.value > 0) || editSaving.value) return false
+    if (editTipFromExcess.value && !editExcessIsSale.value) {
         if (!editWorkerId.value && !editTip.worker_id) return false
     }
     return editPayments.value.some((p) => p.payment_method_id && Number(p.amount) > 0)
@@ -1215,9 +1574,11 @@ const canSaveEdit = computed(() => {
 
 const changeEditQty = (line, delta) => {
     line.quantity = Math.min(editMaxQty(line), Math.max(1, Number(line.quantity || 0) + delta))
+    syncEditLineTotal(line)
 }
 const normalizeEditQty = (line) => {
     line.quantity = Math.min(editMaxQty(line), Math.max(1, Math.floor(Number(line.quantity) || 1)))
+    syncEditLineTotal(line)
 }
 const removeEditLine = (line) => {
     editCart.value = editCart.value.filter((l) => l !== line)
@@ -1226,7 +1587,10 @@ const addEditProduct = (productId) => {
     if (!productId) return
     const existing = editCart.value.find((l) => l.product_id === productId)
     if (existing) {
-        if (existing.quantity < editMaxQty(existing)) existing.quantity++
+        if (existing.quantity < editMaxQty(existing)) {
+            existing.quantity++
+            syncEditLineTotal(existing)
+        }
     } else {
         const p = products.value.find((x) => x.id === productId)
         if (!p) return
@@ -1234,12 +1598,14 @@ const addEditProduct = (productId) => {
         if (max < 1) {
             $q.notify({ type: 'warning', message: `Sin existencia de ${p.name}`, timeout: 1500 })
         } else {
+            const unit = Number(p.price_cup)
             editCart.value.push({
                 product_id: p.id,
                 code: p.code,
                 name: p.name,
                 quantity: 1,
-                unit_price: Number(p.price_cup),
+                unit_price: unit,
+                line_total: round2(unit),
             })
         }
     }
@@ -1252,25 +1618,47 @@ const openEditSale = async (sale) => {
     const originals = {}
     editCart.value = (sale.items || []).map((it) => {
         originals[it.product_id] = (originals[it.product_id] || 0) + Number(it.quantity)
+        const quantity = Number(it.quantity)
+        const unit = Number(it.unit_price_cup)
+        // Prefer the stored line total: unit × qty can invent an extra cent when cents don't divide evenly.
+        const lineTotal = it.subtotal_cup != null ? round2(Number(it.subtotal_cup)) : round2(quantity * unit)
         return {
             product_id: it.product_id,
             code: it.product?.code || '',
             name: it.product?.name || 'Producto',
-            quantity: Number(it.quantity),
-            unit_price: Number(it.unit_price_cup),
+            quantity,
+            unit_price: unit,
+            line_total: lineTotal,
         }
     })
     editOriginalQty.value = originals
     editWorkerId.value = sale.worker_id || null
     editNotes.value = sale.notes || ''
-    editPayments.value = (sale.payments || [])
+    const received = (sale.payments || [])
         .filter((p) => Number(p.amount) > 0)
         .map((p) => ({ payment_method_id: p.payment_method_id, amount: Number(p.amount) }))
-    if (!editPayments.value.length) {
-        editPayments.value = [{ payment_method_id: methods.value[0]?.id || null, amount: null }]
+    // If a past rounding left the sale 1 cent above what was paid, snap the last line to the payments.
+    const paidNow = round2(received.reduce((s, p) => s + paymentCup(p), 0))
+    const linesNow = round2(editCart.value.reduce((s, l) => s + editLineTotal(l), 0))
+    if (editCart.value.length && Math.abs(round2(linesNow - paidNow)) === 0.01) {
+        const last = editCart.value[editCart.value.length - 1]
+        last.line_total = round2(editLineTotal(last) - (linesNow - paidNow))
+        last.unit_price = last.quantity ? round2(last.line_total / last.quantity) : last.unit_price
     }
+    const changeRow = (sale.payments || []).find((p) => Number(p.amount) < 0)
+    Object.assign(editChange, changeRow
+        ? { enabled: true, payment_method_id: changeRow.payment_method_id, amount: -Number(changeRow.amount) }
+        : emptyChange())
+    // Payments are stored net of the tip; show what was actually received so the tip is the excess again.
     const tipRow = (sale.tips || [])[0]
+    if (tipRow && Number(tipRow.amount) > 0) {
+        const same = received.find((p) => p.payment_method_id === tipRow.payment_method_id)
+        if (same) same.amount = round2(same.amount + Number(tipRow.amount))
+        else received.push({ payment_method_id: tipRow.payment_method_id, amount: Number(tipRow.amount) })
+    }
+    editPayments.value = received.length ? received : [{ payment_method_id: methods.value[0]?.id || null, amount: null }]
     editWithTip.value = !!tipRow
+    editExcessIsSale.value = false
     Object.assign(editTip, {
         worker_id: tipRow?.worker_id || sale.worker_id || null,
         payment_method_id: tipRow?.payment_method_id || cashCup.value?.id || methods.value[0]?.id || null,
@@ -1281,7 +1669,10 @@ const openEditSale = async (sale) => {
 
 const saveEditSale = async () => {
     if (!canSaveEdit.value || !editSale.value) return
-    if (editTipFromExcess.value) {
+    const editUnderpaid = editRemaining.value >= 0.01
+    if (editUnderpaid && !(await confirmUnderpayment(editTotal.value, editPaidCup.value))) return
+    const editSoldForMore = editExcessIsSale.value && !!editTipFromExcess.value
+    if (editTipFromExcess.value && !editSoldForMore) {
         editWithTip.value = true
         editTip.payment_method_id = editTipFromExcess.value.payment_method_id || cashCup.value?.id || editTip.payment_method_id
         if (!(Number(editTip.amount) > 0)) editTip.amount = editTipFromExcess.value.amount
@@ -1289,16 +1680,25 @@ const saveEditSale = async () => {
     const payload = {
         worker_id: editWorkerId.value || null,
         notes: editNotes.value || null,
-        items: editCart.value.map((l) => ({
-            product_id: l.product_id,
-            quantity: Number(l.quantity),
-            unit_price: Number(l.unit_price),
-        })),
+        items: editCart.value.map((l) => {
+            const quantity = Number(l.quantity)
+            const subtotal = editLineTotal(l)
+            return {
+                product_id: l.product_id,
+                quantity,
+                unit_price: quantity ? subtotal / quantity : Number(l.unit_price),
+                subtotal_cup: subtotal,
+            }
+        }),
         payments: editPayments.value
             .filter((p) => p.payment_method_id && Number(p.amount) > 0)
             .map((p) => ({ payment_method_id: p.payment_method_id, amount: Number(p.amount) })),
+        change: changePayload(editChange),
     }
-    if (editWithTip.value && Number(editTip.amount) > 0) {
+    if (editUnderpaid) payload.accept_underpayment = true
+    if (editSoldForMore) {
+        payload.accept_overpayment = true
+    } else if (editWithTip.value && Number(editTip.amount) > 0) {
         payload.tip = {
             worker_id: editTip.worker_id || editWorkerId.value || null,
             payment_method_id: editTip.payment_method_id || cashCup.value?.id,
@@ -1910,6 +2310,76 @@ body.body--dark .pos-panel--checkout .pos-actions {
 
 body.body--dark .pos-sale-row:hover {
     background: brand-a(gold, 0.08);
+}
+
+.pos-sale-row__pay-amount {
+    font-size: 1.08em;
+    font-weight: 700;
+    color: var(--maia-wine);
+    font-variant-numeric: tabular-nums;
+}
+
+body.body--dark .pos-sale-row__pay-amount {
+    color: var(--maia-gold-bright);
+}
+
+.pos-sale-row__amount--done {
+    color: var(--maia-ink);
+}
+
+.pos-sales-total__amounts {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    column-gap: 6px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.pos-sales-total__plus {
+    margin-right: 6px;
+    opacity: 0.6;
+}
+
+.pos-sales-pays {
+    padding-top: 0;
+}
+
+.pos-sales-pays__grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.pos-sales-pay {
+    appearance: none;
+    border: 1px solid brand-a(wine, 0.18);
+    background: brand-a(ivory, 0.04);
+    color: inherit;
+    border-radius: 10px;
+    padding: 8px 12px;
+    text-align: left;
+    cursor: pointer;
+    min-width: 132px;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.pos-sales-pay:hover {
+    border-color: brand-a(gold, 0.55);
+}
+
+.pos-sales-pay--active {
+    border-color: var(--maia-gold);
+    background: brand-a(gold, 0.12);
+}
+
+body.body--dark .pos-sales-pay {
+    border-color: brand-a(gold-pale, 0.16);
+    background: brand-a(dark, 0.35);
+}
+
+body.body--dark .pos-sale-row__amount--done {
+    color: var(--maia-ivory);
 }
 
 .edit-sale-body {

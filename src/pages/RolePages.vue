@@ -64,13 +64,13 @@
               label="Permisos" color="primary" multiple use-chips emit-value map-options option-value="id"
               option-label="name" dense /> -->
             <q-select outlined class="col-xs-12 q-pt-md" v-model="object.permissions" :options="permissionsOptions"
-              label="Permisos" multiple use-chips emit-value map-options option-value="id" option-label="name" dense>
+              label="Permisos" multiple use-chips emit-value map-options option-value="id"
+              option-label="description" dense use-input input-debounce="0" @filter="filterPermissions">
               <template v-slot:selected-item="scope">
                 <template v-if="scope.index < 3">
                   <q-chip removable @remove="removePermissionChip(scope.index)" color="primary" text-color="white"
                     class="q-mr-xs" size="sm">
-                    {{typeof scope.opt === 'object' ? scope.opt.name : permissionsOptions.find(p => p.id ===
-                      scope.opt)?.name || scope.opt}}
+                    {{ permissionLabel(scope.opt) }}
                   </q-chip>
                 </template>
                 <template v-else-if="scope.index === 3">
@@ -78,6 +78,14 @@
                     +{{ object.permissions.length - 3 }} más
                   </q-chip>
                 </template>
+              </template>
+              <template v-slot:option="scope">
+                <q-item v-bind="scope.itemProps">
+                  <q-item-section>
+                    <q-item-label>{{ scope.opt.description || scope.opt.name }}</q-item-label>
+                    <q-item-label caption>{{ scope.opt.name }}</q-item-label>
+                  </q-item-section>
+                </q-item>
               </template>
               <template v-slot:no-option>
                 <q-item>
@@ -126,10 +134,29 @@ const isDeleteDialogOpen = ref(false);
 const myForm = ref(null);
 const selectedElementId = ref("");
 const pagination = ref({ page: 1, rowsPerPage: 5, rowsNumber: 0 });
+const allPermissions = ref([]);
 const permissionsOptions = ref([]);
 const object = reactive({ name: '', permissions: [] });
 const selectAllPermissions = ref(false);
 let editAuxObject = {};
+
+const permissionLabel = (opt) => {
+  if (typeof opt === 'object' && opt) {
+    return opt.description || opt.label || opt.name
+  }
+  const found = allPermissions.value.find((p) => p.id === opt)
+  return found?.description || found?.label || found?.name || opt
+}
+
+const filterPermissions = (val, update) => {
+  update(() => {
+    const needle = (val || '').toLowerCase()
+    permissionsOptions.value = !needle
+      ? allPermissions.value
+      : allPermissions.value.filter((p) =>
+        `${p.description || ''} ${p.name || ''}`.toLowerCase().includes(needle))
+  })
+}
 
 onMounted(async () => {
   await load();
@@ -139,7 +166,8 @@ onMounted(async () => {
 const loadPermissions = async () => {
   try {
     const permRes = await get_permissions();
-    permissionsOptions.value = permRes.data;
+    allPermissions.value = permRes.data || [];
+    permissionsOptions.value = allPermissions.value;
   } catch (error) {
     Error('No se pudieron cargar los permisos');
   }
@@ -204,8 +232,10 @@ const getElementById = async (id) => {
   dialogLoad.value = true;
   try {
     const res = await get_role_by_id(id);
-    Object.assign(object, res.data, { permissions: res.data.permissions.map(p => p.id) });
-    selectAllPermissions.value = object.permissions.length === permissionsOptions.value.length;
+    const assignableIds = new Set(allPermissions.value.map((p) => p.id))
+    const visiblePerms = (res.data.permissions || []).map((p) => p.id).filter((id) => assignableIds.has(id))
+    Object.assign(object, res.data, { permissions: visiblePerms });
+    selectAllPermissions.value = object.permissions.length === allPermissions.value.length;
     dialog.value = true;
     editAuxObject = { ...object };
   } catch (error) {
@@ -279,7 +309,7 @@ watch(filter, () => {
 function removePermissionChip(index) {
   if (Array.isArray(object.permissions) && index >= 0 && index < object.permissions.length) {
     object.permissions.splice(index, 1);
-    selectAllPermissions.value = object.permissions.length === permissionsOptions.value.length;
+    selectAllPermissions.value = object.permissions.length === allPermissions.value.length;
   }
 }
 
@@ -289,7 +319,7 @@ function removePermissionChip(index) {
  */
 function toggleAllPermissions(value) {
   if (value) {
-    object.permissions = permissionsOptions.value.map(p => p.id);
+    object.permissions = allPermissions.value.map(p => p.id);
   } else {
     object.permissions = [];
   }

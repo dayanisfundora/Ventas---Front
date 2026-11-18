@@ -1,6 +1,6 @@
 <template>
     <q-page class="maia-page">
-        <PageHeader title="Categorías de productos" section="Catálogo">
+        <PageHeader title="Categorías de productos" section="Configuración">
             <q-input dense outlined debounce="400" v-model="filter" placeholder="Buscar" class="maia-field">
                 <template #prepend><q-icon name="search" /></template>
             </q-input>

@@ -15,12 +15,9 @@
                 </div>
                 <q-space />
 
-                <q-btn outline class="bg-white q-ml-sm" style="width: 20px" color="primary" icon="file_upload"
+                <q-btn flat dense no-caps color="primary" icon="picture_as_pdf" label="PDF" class="q-ml-sm"
                     @click="PrintToPdf()" :disable="!printEnabled">
-                    <q-tooltip class="bg-primary" :offset="[10, 10]" transition-show="flip-right"
-                        transition-hide="flip-left">
-                        Exportar
-                    </q-tooltip>
+                    <q-tooltip>Exportar trazas a PDF</q-tooltip>
                 </q-btn>
             </template>
             <template v-slot:body-cell-supervisora="props">
@@ -93,13 +90,14 @@
 
     <!-- MODAL DE DETALLES DE TRAZA -->
     <q-dialog v-model="detailDialog" persistent>
-        <q-card class="app-card modal-compact">
-            <!-- Header simplificado -->
-            <header class="bg-primary">
+        <q-card class="maia-dialog-card modal-compact trace-dialog" style="width: 620px">
+            <header class="trace-dialog__header">
                 <q-toolbar class="q-py-sm">
-                    <q-toolbar-title class="text-subtitle1 text-white">
+                    <q-icon name="history" size="20px" class="q-mr-sm" />
+                    <q-toolbar-title class="text-subtitle1">
                         Detalles de la Traza
                     </q-toolbar-title>
+                    <q-btn flat round dense icon="close" @click="closeDetailDialog" />
                 </q-toolbar>
             </header>
 
@@ -108,7 +106,7 @@
                 <div v-if="traceDetail" class="q-pa-md">
                     <!-- Información principal compacta -->
                     <div class="info-section q-mb-md">
-                        <div class="text-subtitle2 text-primary q-mb-sm">Información General</div>
+                        <div class="trace-section-title q-mb-sm">Información General</div>
                         <div class="row q-gutter-sm text-body2">
                             <div class="col-12 col-sm-6">
                                 <strong>ID:</strong> {{ traceDetail.id }}
@@ -133,7 +131,7 @@
 
                     <!-- Tabla de atributos compacta con paginación -->
                     <div class="attributes-section">
-                        <div class="text-subtitle2 text-primary q-mb-sm">
+                        <div class="trace-section-title q-mb-sm">
                             Atributos Modificados ({{ attributesRows.length }})
                         </div>
 
@@ -154,7 +152,7 @@
                             rows-per-page-label="Por página" class="compact-table" hide-header>
                             <template v-slot:body="props">
                                 <q-tr :props="props">
-                                    <q-td class="text-weight-medium text-primary" style="width: 30%">
+                                    <q-td class="text-weight-medium trace-attr-name" style="width: 30%">
                                         {{ props.row.attribute }}
                                     </q-td>
                                     <q-td class="old-value-simple" style="width: 35%">
@@ -171,8 +169,8 @@
             </div>
 
             <!-- Botones simples -->
-            <q-card-actions class="q-pa-md justify-end bg-grey-1">
-                <q-btn color="primary" label="Cerrar" @click="closeDetailDialog" />
+            <q-card-actions class="q-pa-md justify-end trace-dialog__footer">
+                <q-btn unelevated color="primary" label="Cerrar" @click="closeDetailDialog" />
             </q-card-actions>
         </q-card>
     </q-dialog>
@@ -475,17 +473,56 @@ onMounted(async () => {
     max-height: calc(85vh - 120px);
 }
 
+.trace-dialog {
+    overflow: hidden;
+    background: var(--app-card-bg);
+    color: var(--app-text);
+}
+
+.trace-dialog__header {
+    background: var(--app-header-bg);
+    color: #fff;
+    border-bottom: 2px solid var(--maia-gold);
+}
+
+.trace-dialog__footer {
+    border-top: 1px solid var(--app-gold-line);
+    background: var(--app-surface-2);
+}
+
+.trace-section-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--q-primary);
+}
+
+.trace-attr-name {
+    color: var(--q-primary);
+}
+
+body.body--dark .trace-section-title,
+body.body--dark .trace-attr-name {
+    color: var(--maia-gold-light);
+}
+
 .info-section {
-    border: 1px solid #e0e0e0;
-    border-radius: 4px;
+    border: 1px solid var(--app-gold-line);
+    border-radius: 10px;
     padding: 12px;
-    background: #fafafa;
+    background: var(--app-gold-soft);
 }
 
 .attributes-section {
-    border: 1px solid #e0e0e0;
-    border-radius: 4px;
+    border: 1px solid var(--app-gold-line);
+    border-radius: 10px;
     padding: 12px;
+}
+
+.attributes-section :deep(.q-table__card),
+.attributes-section :deep(.q-table) {
+    background: transparent;
 }
 
 .search-compact {
@@ -501,18 +538,28 @@ onMounted(async () => {
 }
 
 .old-value-simple {
-    background: #ffebee;
-    color: #d32f2f;
+    background: rgba(179, 38, 30, 0.08);
+    color: #b3261e;
     font-size: 12px;
     padding: 4px 8px;
     border-radius: 3px;
 }
 
 .new-value-simple {
-    background: #e8f5e8;
-    color: #388e3c;
+    background: rgba(46, 125, 91, 0.1);
+    color: #2e7d5b;
     font-size: 12px;
     padding: 4px 8px;
     border-radius: 3px;
+}
+
+body.body--dark .old-value-simple {
+    background: rgba(239, 83, 80, 0.14);
+    color: #ff8a80;
+}
+
+body.body--dark .new-value-simple {
+    background: rgba(102, 187, 106, 0.14);
+    color: #9ccc65;
 }
 </style>

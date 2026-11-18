@@ -9,7 +9,7 @@
             </q-btn>
         </PageHeader>
 
-        <q-banner v-if="profitWarning" class="maia-card bg-orange-1 text-orange-10 q-mb-md" rounded>
+        <q-banner v-if="profitWarning" class="maia-card maia-banner--warning q-mb-md" rounded>
             <template #avatar><q-icon name="warning" color="warning" /></template>
             Los porcentajes de utilidad de los bolsillos activos suman {{ profitSum }}%. Al repartir una feria se
             prorratean, pero conviene que sumen 100%.

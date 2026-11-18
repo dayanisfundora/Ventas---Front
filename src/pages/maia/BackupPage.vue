@@ -8,10 +8,17 @@
                     <q-card-section class="row items-start no-wrap q-gutter-md">
                         <q-avatar class="backup-icon backup-icon--save" icon="cloud_download" size="52px" />
                         <div class="col">
-                            <div class="text-subtitle1 text-weight-bold">Salvar base de datos</div>
+                            <div class="text-subtitle1 text-weight-bold">Salvar datos</div>
                             <div class="text-body2 text-grey-7 q-mt-xs">
-                                Descarga un archivo <b>.sql</b> con todos los datos actuales: productos, ferias, ventas,
-                                inventario, propinas, usuarios y roles. Guárdelo en un lugar seguro (memoria, nube, otra PC).
+                                <template v-if="isFullBackup">
+                                    Descarga un archivo <b>.sql</b> con toda la base de datos de la instalación
+                                    (todas las entidades). Solo disponible para Super Admin.
+                                </template>
+                                <template v-else>
+                                    Descarga un archivo <b>.json</b> con <b>solo los datos de su negocio</b>:
+                                    productos, ferias, ventas, inventario, propinas y usuarios de su entidad.
+                                    No incluye datos de otros negocios.
+                                </template>
                             </div>
                         </div>
                     </q-card-section>
@@ -33,21 +40,26 @@
                     <q-card-section class="row items-start no-wrap q-gutter-md">
                         <q-avatar class="backup-icon backup-icon--restore" icon="settings_backup_restore" size="52px" />
                         <div class="col">
-                            <div class="text-subtitle1 text-weight-bold">Restaurar base de datos</div>
+                            <div class="text-subtitle1 text-weight-bold">Restaurar datos</div>
                             <div class="text-body2 text-grey-7 q-mt-xs">
-                                Reemplaza <b>todos</b> los datos actuales por los de un respaldo <b>.sql</b> descargado antes.
-                                Lo registrado después de ese respaldo se perderá.
+                                <template v-if="isFullBackup">
+                                    Reemplaza <b>toda</b> la base de datos por un respaldo <b>.sql</b> completo.
+                                </template>
+                                <template v-else>
+                                    Reemplaza sus datos actuales por un respaldo <b>.json</b> descargado antes.
+                                </template>
                             </div>
                         </div>
                     </q-card-section>
                     <q-card-section class="q-pt-none">
-                        <q-file v-model="restoreFile" outlined dense accept=".sql" label="Seleccionar archivo .sql" clearable
+                        <q-file v-model="restoreFile" outlined dense :accept="fileAccept"
+                            :label="fileLabel" clearable
                             max-file-size="52428800" :disable="downloading || restoring" @rejected="onRejected">
                             <template #prepend><q-icon name="upload_file" /></template>
                         </q-file>
                     </q-card-section>
                     <q-card-actions class="q-px-md q-pb-md">
-                        <q-btn unelevated no-caps color="negative" icon="restore" label="Restaurar base de datos"
+                        <q-btn unelevated no-caps color="negative" icon="restore" label="Restaurar"
                             :loading="restoring" :disable="downloading || !restoreFile" @click="confirmDialog = true" />
                     </q-card-actions>
                 </q-card>
@@ -56,16 +68,13 @@
 
         <q-dialog v-model="confirmDialog" persistent>
             <q-card class="maia-dialog-card" style="width: 460px; max-width: 95vw">
-                <q-card-section class="text-h6">Restaurar base de datos</q-card-section>
+                <q-card-section class="text-h6">Confirmar restauración</q-card-section>
                 <q-card-section class="q-pt-none">
                     <div class="row no-wrap items-start q-gutter-sm">
                         <q-icon name="warning_amber" color="negative" size="28px" />
                         <div class="col">
-                            Se reemplazarán todos los datos actuales por los del archivo
+                            Se reemplazarán los datos actuales por los del archivo
                             <b>{{ restoreFile?.name }}</b>. Esta acción no se puede deshacer.
-                            <div class="text-caption text-grey-7 q-mt-sm">
-                                Sugerencia: descargue primero un respaldo de los datos actuales.
-                            </div>
                         </div>
                     </div>
                     <q-input class="q-mt-md" dense outlined v-model="confirmText" label='Escriba "RESTAURAR" para confirmar'
@@ -79,12 +88,12 @@
             </q-card>
         </q-dialog>
 
-        <q-inner-loading :showing="restoring" color="primary" label="Restaurando base de datos..." />
+        <q-inner-loading :showing="restoring" color="primary" label="Restaurando datos..." />
     </q-page>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { api } from 'src/boot/axios'
 import PageHeader from 'src/components/maia/PageHeader.vue'
 import { useAuthStore } from 'src/stores/auth-store'
@@ -95,14 +104,19 @@ import { apiErrorMessage } from 'src/assets/js/util/maia'
 const authStore = useAuthStore()
 const fairStore = useFairStore()
 
+/** Super Admin sin entidad → dump SQL completo; resto → JSON de su negocio. */
+const isFullBackup = computed(() => authStore.hasRole('Super Admin'))
+const fileAccept = computed(() => (isFullBackup.value ? '.sql,.json' : '.json'))
+const fileLabel = computed(() => (isFullBackup.value ? 'Seleccionar archivo .sql o .json' : 'Seleccionar archivo .json'))
+
 const downloading = ref(false)
 const restoring = ref(false)
 const restoreFile = ref(null)
 const confirmDialog = ref(false)
 const confirmText = ref('')
 
-const sqlFilename = (disposition) => {
-    const fallback = `backup_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '_')}.sql`
+const backupFilename = (disposition, fallbackExt) => {
+    const fallback = `backup_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '_')}.${fallbackExt}`
     if (!disposition) return fallback
     const utf8Match = disposition.match(/filename\*\s*=\s*UTF-8''([^;]+)/i)
     const plainMatch = disposition.match(/filename\s*=\s*("?)([^";]+)\1/i)
@@ -113,7 +127,10 @@ const sqlFilename = (disposition) => {
         name = name.trim()
     }
     name = name.replace(/^["']|["']$/g, '')
-    if (!name.toLowerCase().endsWith('.sql')) name = `${name || 'backup'}.sql`
+    const lower = name.toLowerCase()
+    if (!lower.endsWith('.sql') && !lower.endsWith('.json')) {
+        name = `${name || 'backup'}.${fallbackExt}`
+    }
     return name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_') || fallback
 }
 
@@ -123,7 +140,7 @@ const blobErrorMessage = async (error) => {
             const payload = JSON.parse(await error.response.data.text())
             return [payload.message, payload.error].filter(Boolean).join(' ')
         } catch {
-            // fall through to the generic message
+            // fall through
         }
     }
     return apiErrorMessage(error)
@@ -133,14 +150,23 @@ const downloadBackup = async () => {
     downloading.value = true
     try {
         const response = await api.get('backup/database', { responseType: 'blob', timeout: 300000 })
-        if ((response.headers['content-type'] || '').includes('application/json')) {
+        const disposition = response.headers['content-disposition'] || ''
+        const backupType = response.headers['x-maia-backup-type'] || ''
+        const contentType = response.headers['content-type'] || ''
+
+        // Error responses are JSON blobs without a download Content-Disposition
+        if (!disposition.includes('filename') && contentType.includes('application/json')) {
             const payload = JSON.parse(await response.data.text())
             throw new Error(payload.message || 'No se pudo generar el respaldo.')
         }
-        const url = URL.createObjectURL(new Blob([response.data], { type: 'application/sql' }))
+
+        const isTenant = backupType === 'tenant' || (contentType.includes('application/json') && disposition.includes('.json'))
+        const ext = isTenant ? 'json' : 'sql'
+        const mime = isTenant ? 'application/json' : 'application/sql'
+        const url = URL.createObjectURL(new Blob([response.data], { type: mime }))
         const link = document.createElement('a')
         link.href = url
-        link.download = sqlFilename(response.headers['content-disposition'])
+        link.download = backupFilename(disposition, ext)
         document.body.appendChild(link)
         link.click()
         setTimeout(() => {
@@ -155,7 +181,11 @@ const downloadBackup = async () => {
     }
 }
 
-const onRejected = () => NotifyError('El archivo debe ser .sql y no superar 50 MB.')
+const onRejected = () => NotifyError(
+    isFullBackup.value
+        ? 'El archivo debe ser .sql o .json y no superar 50 MB.'
+        : 'El archivo debe ser .json y no superar 50 MB.',
+)
 
 const closeConfirm = () => {
     confirmDialog.value = false
@@ -183,7 +213,7 @@ const restoreBackup = async () => {
 
         restoreFile.value = null
         closeConfirm()
-        Success(data?.message || 'Base de datos restaurada correctamente.')
+        Success(data?.message || 'Datos restaurados correctamente.')
         await fairStore.loadFairs(true)
     } catch (error) {
         let message = [error?.response?.data?.message, error?.response?.data?.error].filter(Boolean).join(' ') || apiErrorMessage(error)

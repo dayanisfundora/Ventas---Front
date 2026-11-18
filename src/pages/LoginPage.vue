@@ -114,8 +114,7 @@
                 </form>
             </div>
 
-            <p class="lp-footer">© {{ currentYear }} {{ brandStore.name }}. Todos los derechos reservados.</p>
-            <p class="lp-dev">Desarrollado por <strong>{{ developerName }}</strong></p>
+            <p class="lp-footer">© {{ currentYear }} <strong>{{ developerName }}</strong>. Todos los derechos reservados.</p>
         </main>
     </div>
 </template>
@@ -530,13 +529,6 @@ export default {
     margin: 26px 0 0;
     font-size: 0.74rem;
     letter-spacing: 0.04em;
-    color: #9c8a7f;
-}
-
-.lp-dev {
-    margin: 6px 0 0;
-    font-size: 0.7rem;
-    letter-spacing: 0.06em;
     color: #9c8a7f;
 
     strong {

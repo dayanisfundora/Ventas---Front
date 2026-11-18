@@ -6,13 +6,14 @@
 
         <q-tabs v-model="tab" dense align="left" active-color="primary" indicator-color="primary" class="q-mb-md" no-caps>
             <q-tab name="sheet" icon="fact_check" label="Hoja del día y conteo" />
+            <q-tab name="fair" icon="inventory_2" label="Inventario de la feria" />
             <q-tab name="movements" icon="swap_vert" label="Entradas y salidas" />
         </q-tabs>
 
         <q-tab-panels v-model="tab" animated class="bg-transparent">
             <q-tab-panel name="sheet" class="q-pa-none">
                 <div class="row q-col-gutter-md q-mb-md">
-                    <div v-for="s in stats" :key="s.label" class="col-6 col-sm-4 col-md-2">
+                    <div v-for="s in stats" :key="s.label" class="col-6 col-sm-4 col-md">
                         <div class="maia-stat">
                             <div class="maia-stat__label">{{ s.label }}</div>
                             <div class="maia-stat__value" :class="s.class">{{ s.value }}</div>
@@ -29,9 +30,9 @@
                         <q-toggle dense v-model="onlyDifferences" label="Solo diferencias" />
                         <q-space />
                         <q-btn flat dense no-caps color="primary" icon="table_view" label="Excel" :disable="!fairStore.dayId"
-                            @click="downloadFile(`Report/Day/${fairStore.dayId}/Excel`, {}, 'hoja-del-dia.xlsx')" />
+                            @click="exportDayInventory('Excel')" />
                         <q-btn flat dense no-caps color="primary" icon="picture_as_pdf" label="PDF" :disable="!fairStore.dayId"
-                            @click="downloadFile(`Report/Day/${fairStore.dayId}/PDF`, {}, 'hoja-del-dia.pdf')" />
+                            @click="exportDayInventory('PDF')" />
                         <template v-if="canCount">
                             <q-btn outline no-caps color="primary" icon="content_copy" label="Conteo = final" @click="fillCountsWithFinal" />
                             <q-btn unelevated no-caps color="primary" icon="save" label="Guardar conteo" :loading="savingCounts"
@@ -78,22 +79,77 @@
                 </div>
             </q-tab-panel>
 
+            <q-tab-panel name="fair" class="q-pa-none">
+                <q-banner v-if="!fairStore.fairId" class="maia-card maia-banner--warning" rounded>Seleccione una feria.</q-banner>
+                <template v-else>
+                    <div class="row q-col-gutter-md q-mb-md">
+                        <div v-for="s in fairStats" :key="s.label" class="col-6 col-sm-4 col-md">
+                            <div class="maia-stat">
+                                <div class="maia-stat__label">{{ s.label }}</div>
+                                <div class="maia-stat__value" :class="s.class">{{ s.value }}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <q-card flat class="maia-card">
+                        <q-card-section class="row items-center q-gutter-sm q-py-sm">
+                            <q-input dense outlined debounce="250" v-model="fairSearch" placeholder="Buscar producto" class="maia-field" clearable>
+                                <template #prepend><q-icon name="search" /></template>
+                            </q-input>
+                            <q-toggle dense v-model="fairOnlyActivity" label="Solo con movimiento" @update:model-value="loadFairSheet" />
+                            <q-toggle dense v-model="fairOnlyRemaining" label="Solo con existencia" />
+                            <q-space />
+                            <div class="text-caption text-grey-7">
+                                Toda la feria · no depende del día seleccionado
+                            </div>
+                        </q-card-section>
+                        <q-table flat dense class="maia-table maia-sticky" :rows="visibleFairRows" :columns="fairColumns" row-key="product_id"
+                            :loading="fairLoading" :pagination="{ rowsPerPage: 0 }" hide-pagination
+                            style="max-height: calc(100vh - 340px)" no-data-label="Sin productos">
+                            <template #body-cell-name="props">
+                                <q-td :props="props">
+                                    <span class="text-grey-7 text-mono q-mr-xs">#{{ props.row.code }}</span>{{ props.row.name }}
+                                </q-td>
+                            </template>
+                            <template #body-cell-final="props">
+                                <q-td :props="props" class="text-weight-bold">{{ props.row.final }}</q-td>
+                            </template>
+                            <template #body-cell-final_value="props">
+                                <q-td :props="props" class="text-weight-bold">{{ props.row.final_value ? money(props.row.final_value) : '' }}</q-td>
+                            </template>
+                        </q-table>
+                    </q-card>
+                    <div class="text-caption text-grey q-mt-sm">
+                        Inicial: existencia al arrancar la feria. Final: lo que queda hoy (inicial + entradas/salidas − vendido).
+                        Valor final = existencia × precio actual.
+                    </div>
+                </template>
+            </q-tab-panel>
+
             <q-tab-panel name="movements" class="q-pa-none">
                 <q-card flat class="maia-card">
                     <q-card-section class="row items-center q-gutter-sm q-py-sm">
                         <q-select dense outlined clearable emit-value map-options options-dense class="maia-field" style="min-width: 180px"
                             label="Tipo" :options="movementTypeOptions" v-model="movementType" @update:model-value="loadMovements" />
                         <q-toggle dense v-model="movementsOnlyDay" label="Solo el día seleccionado" @update:model-value="loadMovements" />
+                        <q-toggle v-if="initialCount && movementType !== 'initial'" dense v-model="showInitial"
+                            :label="showInitial ? `Ocultar inventario inicial (${initialCount})` : `Ver inventario inicial (${initialCount})`">
+                            <q-tooltip max-width="260px">
+                                El inventario inicial (existencia al arrancar) aparece en esta lista; puede ocultarlo si solo quiere entradas y salidas.
+                            </q-tooltip>
+                        </q-toggle>
                         <q-space />
                         <q-btn v-if="can('inventario.editar')" unelevated no-caps color="primary" icon="add" label="Nuevo movimiento"
-                            :disable="!fairStore.fairId" @click="openMovementDialog" />
+                            :disable="!fairStore.fairId" @click="openMovementDialog()" />
                     </q-card-section>
-                    <q-table flat dense class="maia-table" :rows="movements" :columns="movementColumns" row-key="id"
+                    <q-table flat dense class="maia-table" :rows="visibleMovements" :columns="movementColumns" row-key="id"
                         :loading="movementsLoading" :pagination="{ rowsPerPage: 25 }" no-data-label="Sin movimientos"
                         rows-per-page-label="Filas por página">
                         <template #body-cell-type="props">
                             <q-td :props="props">
                                 <q-badge :color="typeColor(props.value)" :label="MOVEMENT_TYPES[props.value] || props.value" />
+                                <q-badge v-if="props.row.consignment" color="orange-8" outline class="q-ml-xs" label="Consignación">
+                                    <q-tooltip v-if="props.row.consignor">Entregado por {{ props.row.consignor }}</q-tooltip>
+                                </q-badge>
                             </q-td>
                         </template>
                         <template #body-cell-quantity="props">
@@ -103,8 +159,15 @@
                         </template>
                         <template #body-cell-action="props">
                             <q-td :props="props">
-                                <q-btn v-if="can('inventario.editar')" flat round dense color="negative" icon="delete"
-                                    @click="removeMovement(props.row)" />
+                                <div v-if="can('inventario.editar')" class="row no-wrap justify-center">
+                                    <q-btn v-if="isEditableMovement(props.row)" flat round dense color="primary" icon="edit"
+                                        @click="openMovementDialog(props.row)">
+                                        <q-tooltip>Editar</q-tooltip>
+                                    </q-btn>
+                                    <q-btn flat round dense color="negative" icon="delete" @click="removeMovement(props.row)">
+                                        <q-tooltip>Eliminar</q-tooltip>
+                                    </q-btn>
+                                </div>
                             </q-td>
                         </template>
                     </q-table>
@@ -115,32 +178,56 @@
         <q-dialog v-model="movementDialog" persistent>
             <q-card class="maia-dialog-card" style="width: 720px; max-width: 95vw">
                 <q-form @submit.prevent="saveMovement">
-                    <q-card-section class="text-h6">Nuevo movimiento de inventario</q-card-section>
+                    <q-card-section class="text-h6">{{ movement.id ? 'Editar movimiento de inventario' : 'Nuevo movimiento de inventario' }}</q-card-section>
+                    <q-card-section v-if="!movement.id" class="q-pt-none text-caption text-grey-7">
+                        Elija el producto del catálogo (aunque aún no esté en esta feria) y regístrelo como inventario inicial o entrada.
+                    </q-card-section>
                     <q-card-section class="row q-col-gutter-md">
                         <div class="col-12">
-                            <q-btn-toggle v-model="movement.type" unelevated no-caps toggle-color="primary" spread :options="typeToggle" />
+                            <q-btn-toggle v-model="movement.type" unelevated no-caps toggle-color="primary" spread :options="typeToggle"
+                            @update:model-value="onMovementType" />
                         </div>
                         <q-select class="col-12 col-sm-6 maia-field" outlined dense emit-value map-options clearable label="Día"
                             :options="dayOptions" v-model="movement.fair_day_id"
-                            :hint="movement.type === 'initial' ? 'Vacío = inventario antes de iniciar la feria' : 'Requerido'" />
+                            :hint="movement.type === 'initial' ? 'Puede dejarlo vacío (antes de la feria) o el día de apertura' : 'Requerido'" />
                         <q-input class="col-12 col-sm-6 maia-field" outlined dense label="Nota" v-model="movement.notes" maxlength="255" />
+                        <template v-if="movement.type !== 'exit'">
+                            <div class="col-12 col-sm-6 row items-center">
+                                <q-toggle v-model="movement.consignment" dense label="Mercancía en consignación" />
+                                <q-icon name="help_outline" size="16px" class="q-ml-xs text-grey-6">
+                                    <q-tooltip max-width="260px">
+                                        Productos que le entregan para vender y que se pagan al dueño cuando se venden.
+                                    </q-tooltip>
+                                </q-icon>
+                            </div>
+                            <q-input v-if="movement.consignment" class="col-12 col-sm-6 maia-field" outlined dense maxlength="80"
+                                label="Entregado por *" v-model="movement.consignor" placeholder="Nombre del dueño"
+                                :rules="[(v) => !!(v && v.trim()) || 'Indique quién lo entregó']" hide-bottom-space />
+                        </template>
                         <div class="col-12">
                             <div v-for="(item, i) in movement.items" :key="i" class="row q-col-gutter-sm items-center q-mb-xs">
-                                <q-select class="col" dense outlined emit-value map-options use-input input-debounce="150" options-dense
-                                    label="Producto" :options="productFilterOptions" v-model="item.product_id" @filter="filterProducts" />
+                                <q-select class="col" dense outlined emit-value map-options use-input fill-input hide-selected clearable
+                                    input-debounce="150" options-dense label="Producto" :options="productFilterOptions"
+                                    v-model="item.product_id" @filter="filterProducts"
+                                    @input-value="(text) => { if (!text) item.product_id = null }">
+                                    <template #no-option>
+                                        <q-item><q-item-section class="text-grey">Sin productos que coincidan</q-item-section></q-item>
+                                    </template>
+                                </q-select>
                                 <q-input class="col-3" dense outlined type="number" min="1" label="Cantidad" v-model.number="item.quantity" />
-                                <div class="col-auto">
+                                <div v-if="!movement.id" class="col-auto">
                                     <q-btn flat round dense icon="close" color="negative" :disable="movement.items.length === 1"
                                         @click="movement.items.splice(i, 1)" />
                                 </div>
                             </div>
-                            <q-btn flat dense no-caps color="primary" icon="add" label="Agregar producto"
+                            <q-btn v-if="!movement.id" flat dense no-caps color="primary" icon="add" label="Agregar producto"
                                 @click="movement.items.push({ product_id: null, quantity: 1 })" />
                         </div>
                     </q-card-section>
                     <q-card-actions align="right">
                         <q-btn flat label="Cancelar" v-close-popup />
-                        <q-btn unelevated color="primary" label="Registrar" type="submit" :loading="savingMovement" />
+                        <q-btn unelevated color="primary" :label="movement.id ? 'Guardar cambios' : 'Registrar'" type="submit"
+                            :loading="savingMovement" />
                     </q-card-actions>
                 </q-form>
             </q-card>
@@ -149,7 +236,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useQuasar } from 'quasar'
 import { api } from 'src/boot/axios'
 import PageHeader from 'src/components/maia/PageHeader.vue'
@@ -218,7 +305,8 @@ const stats = computed(() => {
     const debtTotal = rows.value.reduce((s, r) => s + debt(r), 0)
     return [
         { label: 'Inicial', value: int(totals.value.initial) },
-        { label: 'Entradas/salidas', value: int(totals.value.in_out) },
+        { label: 'Entradas', value: int(totals.value.entry), class: 'text-positive' },
+        { label: 'Salidas', value: int(totals.value.exit), class: 'text-negative' },
         { label: 'Vendido', value: int(totals.value.sold) },
         { label: 'Final teórico', value: int(totals.value.final) },
         { label: 'Venta bruta CUP', value: money(totals.value.gross) },
@@ -241,6 +329,17 @@ const loadSheet = async () => {
     } finally {
         sheetLoading.value = false
     }
+}
+
+/** Inventory-only export (never the day-close / Cuadre report). */
+const exportDayInventory = (format) => {
+    if (!fairStore.dayId) return
+    const ext = format === 'PDF' ? 'pdf' : 'xlsx'
+    downloadFile(
+        `Inventory/Day/${fairStore.dayId}/${format}`,
+        { only_activity: onlyActivity.value ? 1 : 0 },
+        `inventario_${fairStore.day?.date || 'dia'}.${ext}`,
+    )
 }
 
 const applySheet = (data) => {
@@ -292,18 +391,86 @@ const applyCounts = () => {
     })
 }
 
+/* ---------- Fair-wide inventory ---------- */
+const fairRows = ref([])
+const fairTotals = ref({})
+const fairLoading = ref(false)
+const fairSearch = ref('')
+const fairOnlyActivity = ref(true)
+const fairOnlyRemaining = ref(false)
+
+const fairColumns = [
+    { name: 'name', label: 'Producto', field: 'name', align: 'left' },
+    { name: 'price_cup', label: 'Precio', field: 'price_cup', align: 'right', format: money },
+    { name: 'initial', label: 'Inicial', field: 'initial', align: 'right' },
+    { name: 'in_out', label: 'Entr./Sal.', field: 'in_out', align: 'right', format: (v) => (v ? (v > 0 ? `+${v}` : v) : '') },
+    { name: 'sold', label: 'Vendido', field: 'sold', align: 'right', format: (v) => v || '' },
+    { name: 'gross', label: 'Venta CUP', field: 'gross', align: 'right', format: (v) => (v ? money(v) : '') },
+    { name: 'final', label: 'Final', field: 'final', align: 'right' },
+    { name: 'final_value', label: 'Valor final CUP', field: 'final_value', align: 'right' },
+]
+
+const visibleFairRows = computed(() => {
+    const term = normalize(fairSearch.value).trim()
+    return fairRows.value.filter((r) => {
+        if (fairOnlyRemaining.value && !(r.final > 0)) return false
+        return !term || r.code === term || normalize(r.name).includes(term)
+    })
+})
+
+const fairStats = computed(() => [
+    { label: 'Inicial', value: int(fairTotals.value.initial) },
+    { label: 'Entradas', value: int(fairTotals.value.entry), class: 'text-positive' },
+    { label: 'Salidas', value: int(fairTotals.value.exit), class: 'text-negative' },
+    { label: 'Vendido', value: int(fairTotals.value.sold) },
+    { label: 'Final', value: int(fairTotals.value.final) },
+    { label: 'Valor final CUP', value: money(fairTotals.value.final_value) },
+    { label: 'Venta bruta CUP', value: money(fairTotals.value.gross) },
+])
+
+const loadFairSheet = async () => {
+    if (!fairStore.fairId) {
+        fairRows.value = []
+        fairTotals.value = {}
+        return
+    }
+    fairLoading.value = true
+    try {
+        const { data } = await api.get(`Inventory/Fair/${fairStore.fairId}`, {
+            params: { only_activity: fairOnlyActivity.value ? 1 : 0 },
+        })
+        fairRows.value = data.data || []
+        fairTotals.value = data.totals || {}
+    } catch (error) {
+        notifyApiError(error)
+    } finally {
+        fairLoading.value = false
+    }
+}
+
 /* ---------- Movements ---------- */
 const movements = ref([])
 const movementsLoading = ref(false)
 const movementType = ref(null)
 const movementsOnlyDay = ref(false)
 const movementTypeOptions = ['initial', 'entry', 'exit', 'adjustment'].map((v) => ({ label: MOVEMENT_TYPES[v], value: v }))
+const showInitial = ref(true)
+const initialCount = computed(() => movements.value.filter((m) => m.type === 'initial').length)
+const visibleMovements = computed(() => (showInitial.value || movementType.value === 'initial'
+    ? movements.value
+    : movements.value.filter((m) => m.type !== 'initial')))
 const typeToggle = [
     { label: 'Entrada', value: 'entry' },
     { label: 'Salida', value: 'exit' },
     { label: 'Inventario inicial', value: 'initial' },
 ]
 const typeColor = (t) => ({ initial: 'blue-grey', entry: 'positive', exit: 'negative', adjustment: 'orange-8' }[t] || 'grey')
+
+const onMovementType = (type) => {
+    if (type === 'initial' && !movement.fair_day_id) {
+        movement.fair_day_id = fairStore.isDayClosed ? null : fairStore.dayId
+    }
+}
 
 const movementColumns = [
     { name: 'date', label: 'Día', field: (r) => (r.fair_day ? formatDate(r.fair_day.date) : 'Antes de la feria'), align: 'left' },
@@ -356,7 +523,10 @@ const movementDialog = ref(false)
 const savingMovement = ref(false)
 const products = ref([])
 const productFilterOptions = ref([])
-const movement = reactive({ type: 'entry', fair_day_id: null, notes: '', items: [] })
+const movement = reactive({ id: null, type: 'entry', fair_day_id: null, notes: '', consignment: false, consignor: '', items: [] })
+
+const isDayClosedId = (dayId) => fairStore.days.find((d) => d.id === dayId)?.status === 'closed'
+const isEditableMovement = (row) => ['initial', 'entry', 'exit'].includes(row.type) && !(row.fair_day_id && isDayClosedId(row.fair_day_id))
 
 const dayOptions = computed(() => fairStore.days.map((d) => ({
     label: `${weekday(d.date)} ${formatDate(d.date)}${d.status === 'closed' ? ' (cerrado)' : ''}`,
@@ -368,16 +538,47 @@ const productOptions = computed(() => products.value.map((p) => ({ label: `#${p.
 
 const filterProducts = (val, update) => {
     update(() => {
-        const term = normalize(val).trim()
+        // With fill-input the box holds the selected label on open; show the full list then.
+        const isSelectedLabel = productOptions.value.some((o) => o.label === val)
+        const term = isSelectedLabel ? '' : normalize(val).trim().replace(/^#/, '')
         productFilterOptions.value = term ? productOptions.value.filter((o) => o.search.includes(term)) : productOptions.value
     })
 }
 
-const openMovementDialog = async () => {
-    Object.assign(movement, { type: 'entry', fair_day_id: fairStore.isDayClosed ? null : fairStore.dayId, notes: '', items: [{ product_id: null, quantity: 1 }] })
+const openMovementDialog = async (row = null) => {
+    if (row) {
+        Object.assign(movement, {
+            id: row.id,
+            type: row.type,
+            fair_day_id: row.fair_day_id || null,
+            notes: row.notes || '',
+            consignment: !!row.consignment,
+            consignor: row.consignor || '',
+            items: [{ product_id: row.product_id, quantity: Math.abs(Number(row.quantity)) }],
+        })
+    } else {
+        Object.assign(movement, {
+            id: null,
+            type: 'entry',
+            fair_day_id: fairStore.isDayClosed ? null : fairStore.dayId,
+            notes: '',
+            consignment: false,
+            consignor: '',
+            items: [{ product_id: null, quantity: 1 }],
+        })
+    }
     movementDialog.value = true
     try {
-        const { data } = await api.get('Product/Catalog', { params: { fair_day_id: fairStore.dayId || fairStore.days[0]?.id } })
+        // only_fair=false: include the full catalog so new products can be added to this fair
+        const dayId = fairStore.dayId || fairStore.days[0]?.id
+        if (!dayId) {
+            products.value = []
+            productFilterOptions.value = []
+            return
+        }
+        const { data } = await api.get('Product/Catalog', {
+            params: { fair_day_id: dayId, only_fair: 0 },
+        })
         products.value = data.data || []
         productFilterOptions.value = productOptions.value
     } catch (error) {
@@ -388,16 +589,32 @@ const openMovementDialog = async () => {
 const saveMovement = async () => {
     const items = movement.items.filter((i) => i.product_id && Number(i.quantity) > 0)
     if (!items.length) return notifyApiError({ message: 'Agregue al menos un producto con cantidad.' })
+    const consignment = movement.type !== 'exit' && movement.consignment
     savingMovement.value = true
+    const common = {
+        fair_day_id: movement.fair_day_id || null,
+        type: movement.type,
+        notes: movement.notes || null,
+        consignment,
+        consignor: consignment ? movement.consignor?.trim() || null : null,
+    }
     try {
-        await api.post('Inventory/Movement', {
-            fair_id: fairStore.fairId,
-            fair_day_id: movement.fair_day_id || null,
-            type: movement.type,
-            notes: movement.notes || null,
-            items: items.map((i) => ({ product_id: i.product_id, quantity: Number(i.quantity) })),
-        })
-        Success('Movimiento registrado')
+        if (movement.id) {
+            await api.put(`Inventory/Movement/${movement.id}`, {
+                ...common,
+                product_id: items[0].product_id,
+                quantity: Number(items[0].quantity),
+            })
+            Success('Movimiento actualizado')
+        } else {
+            await api.post('Inventory/Movement', {
+                ...common,
+                fair_id: fairStore.fairId,
+                items: items.map((i) => ({ product_id: i.product_id, quantity: Number(i.quantity) })),
+            })
+            Success('Movimiento registrado')
+        }
+        if (movement.type === 'initial') showInitial.value = true
         movementDialog.value = false
         await Promise.all([loadMovements(), loadSheet()])
     } catch (error) {
@@ -407,7 +624,16 @@ const saveMovement = async () => {
     }
 }
 
-const reload = () => Promise.all([loadSheet(), loadMovements()])
+const reload = () => Promise.all([
+    loadSheet(),
+    loadMovements(),
+    tab.value === 'fair' ? loadFairSheet() : null,
+])
+
+watch(tab, (v) => {
+    if (v === 'fair') loadFairSheet()
+    if (v === 'movements') loadMovements()
+})
 
 onMounted(() => fairStore.loadFairs())
 </script>

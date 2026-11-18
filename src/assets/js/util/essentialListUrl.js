@@ -12,9 +12,9 @@ export const essentialListUrl = [
         permission: 'pos.vender'
     },
     {
-        title: 'CATÁLOGO',
-        permission: ['ferias.ver', 'productos.ver', 'categorias.ver', 'trabajadores.ver', 'cierre_feria.ver'],
-        icon: 'storefront',
+        title: 'CONFIGURACIÓN',
+        permission: ['ferias.ver', 'productos.ver', 'categorias.ver', 'trabajadores.ver', 'conceptos_gasto.ver', 'presupuestos.ver', 'inversion.ver'],
+        icon: 'settings',
         children: [
             {
                 title: 'Categorías',
@@ -44,13 +44,13 @@ export const essentialListUrl = [
                 title: 'Conceptos de gasto',
                 icon: 'receipt_long',
                 link: 'ConceptosGasto',
-                permission: ['cierre_feria.ver', 'cierre_feria.editar']
+                permission: ['conceptos_gasto.ver', 'conceptos_gasto.crear', 'conceptos_gasto.editar']
             },
             {
                 title: 'Presupuestos',
                 icon: 'pie_chart',
                 link: 'Presupuestos',
-                permission: ['cierre_feria.ver', 'cierre_feria.editar']
+                permission: ['presupuestos.ver', 'presupuestos.crear', 'presupuestos.editar']
             },
         ]
     },
@@ -143,9 +143,9 @@ export const essentialListUrl = [
         ]
     },
     {
-        title: 'CONFIGURACIÓN',
+        title: 'APARIENCIA',
         permission: ['configuracion.marca'],
-        icon: 'tune',
+        icon: 'palette',
         children: [
             {
                 title: 'Identidad del negocio',
