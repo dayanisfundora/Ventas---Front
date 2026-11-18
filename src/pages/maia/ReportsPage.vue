@@ -37,6 +37,7 @@
             @update:model-value="load">
             <q-tab name="SalesAnalysis" icon="query_stats" label="Análisis de venta" />
             <q-tab name="Products" icon="inventory_2" label="Resumen por producto" />
+            <q-tab name="Tips" icon="volunteer_activism" label="Propinas y salario" />
             <q-tab name="WorkerSales" icon="groups" label="Ventas por trabajador" />
         </q-tabs>
 
@@ -137,6 +138,63 @@
             </q-card>
         </template>
 
+        <!-- Tips & salary -->
+        <template v-if="tab === 'Tips' && tipsReport">
+            <div class="row q-col-gutter-md q-mb-md">
+                <div v-for="s in tipsStats" :key="s.label" class="col-6 col-sm-3">
+                    <div class="maia-stat">
+                        <div class="maia-stat__label">{{ s.label }}</div>
+                        <div class="maia-stat__value">{{ s.value }}</div>
+                    </div>
+                </div>
+            </div>
+            <q-card flat class="maia-card q-mb-md">
+                <q-card-section class="text-subtitle2 q-pb-none">Resumen por trabajador</q-card-section>
+                <q-table flat dense class="maia-table" :rows="tipsSummary" :columns="tipsColumns" row-key="worker_id"
+                    hide-pagination :pagination="{ rowsPerPage: 0 }" no-data-label="Sin datos">
+                    <template #bottom-row>
+                        <q-tr class="total-row">
+                            <q-td>TOTAL</q-td>
+                            <q-td class="text-right">{{ money(tipsSum('tips')) }}</q-td>
+                            <q-td class="text-right">{{ money(tipsSum('commission')) }}</q-td>
+                            <q-td class="text-right">{{ money(tipsSum('subtotal')) }}</q-td>
+                            <q-td class="text-right">{{ tipsSum('days_worked') }}</q-td>
+                            <q-td class="text-right">{{ money(tipsSum('salary')) }}</q-td>
+                            <q-td class="text-right">{{ money(tipsReport.grand_total) }}</q-td>
+                        </q-tr>
+                    </template>
+                </q-table>
+            </q-card>
+            <div class="row q-col-gutter-md">
+                <div v-for="m in tipsMatrices" :key="m.key" class="col-12 col-lg-6">
+                    <q-card flat class="maia-card">
+                        <q-card-section class="text-subtitle2 q-pb-none">{{ m.title }}</q-card-section>
+                        <q-markup-table flat dense class="maia-table" separator="cell" style="overflow-x: auto">
+                            <thead>
+                                <tr>
+                                    <th class="text-left">Día</th>
+                                    <th v-for="w in tipsReport.workers" :key="w.id" class="text-right">{{ w.name }}</th>
+                                    <th class="text-right">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="r in tipsReport[m.key].rows" :key="r.fair_day_id">
+                                    <td>{{ formatDate(r.date) }}</td>
+                                    <td v-for="w in tipsReport.workers" :key="w.id" class="text-right">
+                                        <template v-if="r.cells[w.id]?.count">
+                                            {{ money(r.cells[w.id].amount) }}
+                                            <span class="text-caption text-grey">({{ r.cells[w.id].count }})</span>
+                                        </template>
+                                    </td>
+                                    <td class="text-right text-weight-bold">{{ r.amount ? money(r.amount) : '' }}</td>
+                                </tr>
+                            </tbody>
+                        </q-markup-table>
+                    </q-card>
+                </div>
+            </div>
+        </template>
+
         <!-- Worker sales -->
         <template v-if="tab === 'WorkerSales' && workerSales">
             <q-card flat class="maia-card">
@@ -185,6 +243,7 @@ const loading = ref(false)
 
 const analysis = ref(null)
 const products = ref([])
+const tipsReport = ref(null)
 const workerSales = ref(null)
 const onlySold = ref(true)
 const productSearch = ref('')
@@ -201,6 +260,9 @@ const load = async () => {
         } else if (tab.value === 'Products') {
             const { data } = await api.get(`Report/Products/${fairStore.fairId}`, { params: { ...rangeParams(), only_sold: onlySold.value ? 1 : 0 } })
             products.value = data.data || []
+        } else if (tab.value === 'Tips') {
+            const { data } = await api.get(`Report/Tips/${fairStore.fairId}`)
+            tipsReport.value = data.data
         } else {
             const { data } = await api.get(`Report/WorkerSales/${fairStore.fairId}`)
             workerSales.value = data.data
@@ -213,7 +275,10 @@ const load = async () => {
 }
 
 const exportType = (type, format) => {
-    const params = { ...rangeParams(), ...(type === 'Products' && onlySold.value ? { only_sold: 1 } : {}) }
+    // Catalog is a fair snapshot (opening/current stock); date range must not alter Inicial.
+    const params = type === 'Catalog'
+        ? {}
+        : { ...rangeParams(), ...(type === 'Products' && onlySold.value ? { only_sold: 1 } : {}) }
     downloadFile(`Report/${type}/${fairStore.fairId}/${format}`, params, `${type}.${format === 'PDF' ? 'pdf' : 'xlsx'}`)
 }
 const exportCurrent = (format) => exportType(tab.value, format)
@@ -253,5 +318,28 @@ const productColumns = [
     { name: 'investment', label: 'Inversión', field: 'investment', align: 'right', format: money },
     { name: 'profit', label: 'Ganancia', field: 'profit', align: 'right', format: money, sortable: true },
     { name: 'final', label: 'Final', field: 'final', align: 'right', sortable: true },
+]
+
+/* ---------- Tips & salary ---------- */
+const tipsSummary = computed(() => tipsReport.value?.summary || [])
+const tipsSum = (key) => tipsSummary.value.reduce((s, r) => s + Number(r[key] || 0), 0)
+const tipsStats = computed(() => [
+    { label: 'Propinas', value: money(tipsSum('tips')) },
+    { label: '% de venta', value: money(tipsSum('commission')) },
+    { label: 'Salarios', value: money(tipsSum('salary')) },
+    { label: 'Total', value: money(tipsReport.value?.grand_total || 0) },
+])
+const tipsColumns = [
+    { name: 'name', label: 'Trabajador', field: 'name', align: 'left' },
+    { name: 'tips', label: 'Propinas', field: 'tips', align: 'right', format: money },
+    { name: 'commission', label: '% de venta', field: 'commission', align: 'right', format: money },
+    { name: 'subtotal', label: 'Subtotal', field: 'subtotal', align: 'right', format: money },
+    { name: 'days_worked', label: 'Días', field: 'days_worked', align: 'right' },
+    { name: 'salary', label: 'Salario', field: 'salary', align: 'right', format: money },
+    { name: 'total', label: 'Total', field: 'total', align: 'right', format: money },
+]
+const tipsMatrices = [
+    { key: 'tips', title: 'Propinas por día' },
+    { key: 'commission', title: '% de venta por día' },
 ]
 </script>

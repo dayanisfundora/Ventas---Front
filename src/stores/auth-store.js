@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import { api } from 'boot/axios';
+import { useFairStore } from 'src/stores/fair-store';
 
 const readJson = (key, fallback) => {
   try {
@@ -26,6 +27,8 @@ export const useAuthStore = defineStore('auth', {
     operador: readJson('operador', null),
     juego_datos: readJson('juego_datos', null),
     roles: readJson('roles', []),
+    // Minutes without activity before the session closes (sent by the server; 0 = never)
+    idleMinutes: readJson('idle_minutes', 15),
   }),
 
   getters: {
@@ -126,6 +129,7 @@ export const useAuthStore = defineStore('auth', {
 
         this.operador = response.data.operador || null;
         this.juego_datos = response.data.juego_datos || null;
+        this.setIdleMinutes(response.data.idle_minutes);
 
         // Persist in localStorage
         localStorage.setItem('token', this.token);
@@ -137,6 +141,9 @@ export const useAuthStore = defineStore('auth', {
 
         // Set default authorization header
         api.defaults.headers.common['Authorization'] = `Bearer ${this.token}`;
+
+        // Drop previous session's fair selection (another user / entity).
+        this.resetFairSession();
 
         return response.data;
       } catch (error) {
@@ -227,6 +234,7 @@ export const useAuthStore = defineStore('auth', {
         this.roles = Array.isArray(roles) ? roles : [];
         this.operador = response.data.operador || null;
         this.juego_datos = response.data.juego_datos || null;
+        this.setIdleMinutes(response.data.idle_minutes);
 
         // Persist permissions
         localStorage.setItem('permissions', JSON.stringify(this.permissions));
@@ -273,6 +281,12 @@ export const useAuthStore = defineStore('auth', {
       }
     },
 
+    setIdleMinutes(minutes) {
+      if (minutes === undefined || minutes === null) return;
+      this.idleMinutes = Math.max(0, Number(minutes) || 0);
+      localStorage.setItem('idle_minutes', JSON.stringify(this.idleMinutes));
+    },
+
     /**
      * Clear authentication data.
      */
@@ -292,6 +306,19 @@ export const useAuthStore = defineStore('auth', {
       localStorage.removeItem('operador');
       localStorage.removeItem('juego_datos');
       delete api.defaults.headers.common['Authorization'];
+      this.resetFairSession();
+    },
+
+    /** Clear fair/day selection so the next user does not inherit another entity's fair. */
+    resetFairSession() {
+      localStorage.removeItem('maia_fair_id');
+      localStorage.removeItem('maia_day_id');
+      try {
+        const fairStore = useFairStore();
+        fairStore.$patch({ fairs: [], fairId: null, dayId: null, loading: false });
+      } catch (_) {
+        /* store may not be active yet */
+      }
     },
 
     /**

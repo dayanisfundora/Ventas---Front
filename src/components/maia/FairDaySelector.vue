@@ -7,6 +7,7 @@
                 <q-item v-bind="scope.itemProps">
                     <q-item-section>
                         <q-item-label>{{ scope.opt.name }}</q-item-label>
+                        <q-item-label v-if="scope.opt.caption" caption>{{ scope.opt.caption }}</q-item-label>
                     </q-item-section>
                     <q-item-section side>
                         <q-badge :color="scope.opt.status === 'closed' ? 'grey-6' : 'positive'"
@@ -59,14 +60,25 @@ watch(
     () => emit('change'),
 )
 
+const fairLabel = (f) => {
+    const place = String(f.place || '').trim()
+    const base = place ? `${f.name} · ${place}` : f.name
+    return f.status === 'closed' ? `${base} (cerrada)` : base
+}
+
 const fairOptions = computed(() => {
     const sorted = [...fairStore.fairs].sort((a, b) => {
-        if (a.status === b.status) return String(a.name).localeCompare(String(b.name), 'es')
+        if (a.status === b.status) {
+            const byName = String(a.name).localeCompare(String(b.name), 'es')
+            if (byName !== 0) return byName
+            return String(a.place || '').localeCompare(String(b.place || ''), 'es')
+        }
         return a.status === 'open' ? -1 : 1
     })
     return sorted.map((f) => ({
-        label: f.status === 'closed' ? `${f.name} (cerrada)` : f.name,
+        label: fairLabel(f),
         name: f.name,
+        caption: String(f.place || '').trim() || null,
         value: f.id,
         status: f.status,
     }))

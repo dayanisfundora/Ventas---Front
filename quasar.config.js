@@ -24,6 +24,7 @@ module.exports = configure(function (/* ctx */) {
             'fonts',
             'i18n',
             'axios',
+            'idle-logout',
             'brand',
             'dark-mode',
         ],

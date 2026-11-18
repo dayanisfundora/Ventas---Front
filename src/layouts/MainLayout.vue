@@ -40,7 +40,10 @@
                                     active-class="bg-primary text-white"
                                     @click="switchFair(f.id)"
                                 >
-                                    <q-item-section>{{ f.name }}</q-item-section>
+                                    <q-item-section>
+                                        <q-item-label>{{ f.name }}</q-item-label>
+                                        <q-item-label v-if="f.place" caption>{{ f.place }}</q-item-label>
+                                    </q-item-section>
                                     <q-item-section side>
                                         <q-icon v-if="f.id === fairStore.fairId" name="check" size="18px" />
                                     </q-item-section>
@@ -56,7 +59,10 @@
                                         :active="f.id === fairStore.fairId"
                                         @click="switchFair(f.id)"
                                     >
-                                        <q-item-section class="text-grey-7">{{ f.name }}</q-item-section>
+                                        <q-item-section>
+                                            <q-item-label class="text-grey-7">{{ f.name }}</q-item-label>
+                                            <q-item-label v-if="f.place" caption>{{ f.place }}</q-item-label>
+                                        </q-item-section>
                                     </q-item>
                                 </template>
                                 <q-item v-if="!fairStore.fairs.length" dense>
@@ -119,7 +125,7 @@
             :mini="drawerMini"
             :width="300"
             :mini-width="72"
-            :breakpoint="800"
+            :breakpoint="DRAWER_BREAKPOINT"
             class="main-drawer"
             :class="{ 'main-drawer--mini': drawerMini }"
         >
@@ -182,29 +188,6 @@
                         <EssentialLink :mini="drawerMini" />
                     </q-list>
                 </q-scroll-area>
-
-                <div v-if="authStore.user" class="dbh-user-bar">
-                    <div class="dbh-user-avatar">{{ userInitials }}</div>
-                    <div v-show="!drawerMini" class="column dbh-user-copy">
-                        <span class="dbh-user-name">{{ authStore.user.name }}</span>
-                        <span class="dbh-user-role">{{ userSubtitle }}</span>
-                    </div>
-                    <q-space v-if="!drawerMini" />
-                    <div v-show="!drawerMini" class="dbh-online-badge">
-                        <span class="dbh-online-dot"></span>
-                        <span>En línea</span>
-                    </div>
-                    <q-tooltip
-                        v-if="drawerMini"
-                        anchor="center right"
-                        self="center left"
-                        :offset="[12, 0]"
-                        class="dbh-user-tooltip"
-                    >
-                        <div class="dbh-user-tooltip-name">{{ authStore.user.name }}</div>
-                        <div v-if="userSubtitle" class="dbh-user-tooltip-sub">{{ userSubtitle }}</div>
-                    </q-tooltip>
-                </div>
             </div>
         </q-drawer>
 
@@ -309,12 +292,6 @@ const userInitials = computed(() => {
     const parts = name.split(/\s+/)
     return (parts[0][0] + (parts[1]?.[0] || '')).toUpperCase()
 })
-const userRole = computed(() => authStore.roles?.[0] || 'Usuario')
-const userSubtitle = computed(() => {
-    const name = String(authStore.user?.name || '').trim().toLowerCase()
-    if (userRole.value.toLowerCase() !== name) return userRole.value
-    return authStore.user?.username ? `@${authStore.user.username}` : ''
-})
 const canSell = computed(() => authStore.hasPermission('pos.vender'))
 const openFairs = computed(() => fairStore.fairs.filter((f) => f.status === 'open'))
 const closedFairs = computed(() => fairStore.fairs.filter((f) => f.status !== 'open'))
@@ -327,19 +304,25 @@ async function switchFair(id) {
     if (!id || id === fairStore.fairId) return
     await fairStore.selectFair(id)
 }
+// Below this width the menu floats over the page (phones). From here up it stays docked,
+// reduced to icons until there is room for the full menu.
+const DRAWER_BREAKPOINT = 599
+const DRAWER_FULL_FROM = 1024
+const isDocked = computed(() => $q.screen.width > DRAWER_BREAKPOINT)
+
 const drawer = ref(true)
-const drawerMini = ref(false)
+const drawerMini = ref($q.screen.width > DRAWER_BREAKPOINT && $q.screen.width < DRAWER_FULL_FROM)
 const notifications = ref([])
 
 const drawerTooltip = computed(() => {
-    if ($q.screen.width > 800) {
+    if (isDocked.value) {
         return drawerMini.value ? 'Expandir menú' : 'Contraer menú'
     }
     return drawer.value ? 'Cerrar menú' : 'Abrir menú'
 })
 
 function toggleDrawer() {
-    if ($q.screen.width > 800) {
+    if (isDocked.value) {
         drawerMini.value = !drawerMini.value
         drawer.value = true
         return
@@ -348,12 +331,22 @@ function toggleDrawer() {
 }
 
 watch(
+    () => $q.screen.width,
+    (width, previous) => {
+        if (width <= DRAWER_BREAKPOINT) return
+        drawer.value = true
+        const wasFull = previous === undefined || previous >= DRAWER_FULL_FROM
+        if (width < DRAWER_FULL_FROM && wasFull) drawerMini.value = true
+    },
+    { immediate: true },
+)
+
+watch(
     () => route.name,
     (name) => {
-        if (name === 'PuntoVenta' && $q.screen.width > 800) {
-            drawerMini.value = true
-            drawer.value = true
-        }
+        if (!isDocked.value) return
+        drawer.value = true
+        if (name === 'PuntoVenta') drawerMini.value = true
     },
     { immediate: true },
 )
@@ -815,86 +808,8 @@ onMounted(async () => {
     filter: none;
 }
 
-.main-drawer--mini .dbh-user-bar {
-    justify-content: center;
-    padding: 8px;
-    margin: 6px 0 10px;
-}
-
 .main-drawer--mini .modern-menu-list {
     padding: 8px 0 12px;
-}
-
-.dbh-user-bar {
-    position: relative;
-    z-index: 2;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 12px;
-    border-radius: 14px;
-    margin: 8px 0 14px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(var(--maia-gold-light-rgb), 0.25);
-    color: #f1e6d6;
-    font-size: 12px;
-}
-
-.dbh-user-avatar {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    font-size: 0.78rem;
-    font-weight: 700;
-    color: var(--maia-wine-deep);
-    background: linear-gradient(135deg, var(--maia-gold-pale) 0%, var(--maia-gold-light) 60%, var(--maia-gold) 100%);
-}
-
-.dbh-user-copy {
-    min-width: 0;
-}
-
-.dbh-user-name {
-    font-weight: 600;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 12.5px;
-}
-
-.dbh-user-role {
-    font-size: 10.5px;
-    color: rgba(var(--maia-gold-light-rgb), 0.85);
-}
-
-.dbh-online-badge {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 10px;
-    opacity: 0.9;
-    white-space: nowrap;
-}
-
-.dbh-online-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: #7fd4a8;
-    opacity: 0.92;
-    box-shadow: 0 0 6px rgba(0, 0, 0, 0.12), 0 0 6px rgba(255, 255, 255, 0.06);
-    flex-shrink: 0;
-    transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
-}
-
-.dbh-online-dot:hover,
-.dbh-online-dot:focus {
-    transform: scale(1.15);
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.12), 0 0 10px rgba(255, 255, 255, 0.08);
 }
 
 .drawer-scroll-area {

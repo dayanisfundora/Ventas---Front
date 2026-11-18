@@ -2,7 +2,6 @@
   <q-dialog v-model="dialog" persistent>
     <q-card class="loading-card" flat>
       <q-card-section class="text-center q-pa-xl">
-        <!-- Spinner animado -->
         <div class="loading-spinner-container q-mb-lg">
           <div class="loading-spinner">
             <div class="spinner-ring"></div>
@@ -10,22 +9,20 @@
             <div class="spinner-ring"></div>
           </div>
         </div>
-        
-        <!-- Texto de carga -->
+
         <div class="loading-text q-mb-md">
-          <h6 class="text-h6 q-ma-none text-grey-8 font-weight-medium">
+          <h6 class="loading-title q-ma-none">
             Cargando...
           </h6>
-          <p class="text-body2 text-grey-6 q-ma-none q-mt-xs">
+          <p class="loading-caption q-ma-none q-mt-xs">
             Por favor espere un momento
           </p>
         </div>
-        
-        <!-- Barra de progreso moderna -->
+
         <div class="progress-container">
-          <q-linear-progress 
-            color="primary" 
-            indeterminate 
+          <q-linear-progress
+            color="primary"
+            indeterminate
             rounded
             size="4px"
             class="modern-progress"
@@ -55,9 +52,23 @@ const dialog = computed(() => props.dialogLoad)
   min-width: 320px;
   max-width: 400px;
   border-radius: 16px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+  border-top: 3px solid var(--maia-gold);
+  box-shadow: 0 10px 30px rgba(var(--maia-ink-rgb), 0.18);
   backdrop-filter: blur(10px);
-  background: rgba(255, 255, 255, 0.95);
+  background: var(--app-card-bg);
+  color: var(--app-text);
+  animation: scaleIn 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.loading-title {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--table-head-text, var(--maia-wine));
+}
+
+.loading-caption {
+  font-size: 0.875rem;
+  color: var(--app-text-muted);
 }
 
 .loading-spinner-container {
@@ -106,12 +117,8 @@ const dialog = computed(() => props.dialogLoad)
 }
 
 @keyframes spin {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 .loading-text {
@@ -139,11 +146,6 @@ const dialog = computed(() => props.dialogLoad)
   }
 }
 
-/* Animación de entrada del diálogo */
-.loading-card {
-  animation: scaleIn 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-}
-
 @keyframes scaleIn {
   from {
     opacity: 0;
@@ -153,11 +155,5 @@ const dialog = computed(() => props.dialogLoad)
     opacity: 1;
     transform: scale(1);
   }
-}
-
-/* Efecto hover sutil */
-.loading-card:hover {
-  transform: translateY(-2px);
-  transition: transform 0.3s ease;
 }
 </style>

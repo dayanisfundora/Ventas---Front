@@ -1,6 +1,6 @@
 <template>
     <q-page class="maia-page">
-        <PageHeader title="Ferias y tasas" section="Catálogo">
+        <PageHeader title="Ferias y tasas" section="Configuración">
             <q-input v-if="tab === 'fairs'" dense outlined debounce="400" v-model="search" placeholder="Buscar" class="maia-field">
                 <template #prepend><q-icon name="search" /></template>
             </q-input>
@@ -11,14 +11,15 @@
                 <q-tooltip>Nueva forma de pago</q-tooltip>
             </q-btn>
             <q-btn v-if="tab === 'accounts' && can('ferias.crear')" unelevated round color="primary" icon="add" @click="openAccountDialog()">
-                <q-tooltip>Nueva agrupación</q-tooltip>
+                <q-tooltip>Nueva tarjeta</q-tooltip>
             </q-btn>
         </PageHeader>
 
         <q-tabs v-model="tab" dense align="left" active-color="primary" indicator-color="primary" class="q-mb-md" no-caps>
-            <q-tab name="fairs" icon="storefront" label="Ferias" />
+            <q-tab name="accounts" icon="credit_card" label="Tarjetas" />
             <q-tab name="methods" icon="payments" label="Formas de pago" />
-            <q-tab name="accounts" icon="account_balance" label="Agrupaciones" />
+            <q-tab v-if="canInvestment" name="investment" icon="savings" label="Configurar inversión" />
+            <q-tab name="fairs" icon="storefront" label="Ferias" />
         </q-tabs>
 
         <q-tab-panels v-model="tab" animated class="bg-transparent">
@@ -82,15 +83,15 @@
                 </q-table>
                 <div class="text-caption text-grey q-mt-sm">
                     Estas formas de pago alimentan el select del punto de venta y de propinas.
-                    Las transferencias deben tener una agrupación; el cierre del día verifica por esa agrupación.
+                    Las transferencias deben tener una tarjeta; el cierre del día verifica por esa tarjeta.
                 </div>
             </q-tab-panel>
 
             <q-tab-panel name="accounts" class="q-pa-none">
                 <q-table flat class="maia-card maia-table" :rows="accounts" :columns="accountColumns" row-key="id" hide-pagination
-                    :pagination="{ rowsPerPage: 0 }" no-data-label="No hay agrupaciones. Créelas según las cuentas de su negocio.">
+                    :pagination="{ rowsPerPage: 0 }" no-data-label="No hay tarjetas. Créelas según las cuentas de su negocio.">
                     <template #body-cell-report_key="props">
-                        <q-td :props="props">{{ props.value === 'fcbc' ? 'FCBC (reportes)' : '—' }}</q-td>
+                        <q-td :props="props">{{ props.value === 'fcbc' ? 'FCBC' : '—' }}</q-td>
                     </template>
                     <template #body-cell-state="props">
                         <q-td :props="props">
@@ -112,8 +113,12 @@
                     </template>
                 </q-table>
                 <div class="text-caption text-grey q-mt-sm">
-                    Ejemplos: Maia CUP, Fiscal, Banco X. Marque “FCBC” solo en la agrupación que entra en el cálculo FCBC del cierre de feria.
+                    Ejemplos: Maia CUP, Fiscal, Banco X. Marque “FCBC” solo en la tarjeta que entra en el cálculo FCBC del cierre de feria.
                 </div>
+            </q-tab-panel>
+
+            <q-tab-panel v-if="canInvestment" name="investment" class="q-pa-none">
+                <InvestmentSettingsPanel @saved="(c) => (businessInvestment = c)" />
             </q-tab-panel>
         </q-tab-panels>
 
@@ -127,15 +132,24 @@
                 <q-card-section class="column q-gutter-md">
                     <q-input class="maia-field" outlined dense label="Nombre" v-model="methodForm.name"
                         :rules="[(v) => !!v || 'Requerido']" hide-bottom-space />
+                    <div>
+                        <div class="kind-picker__label">Tipo</div>
+                        <div class="kind-picker" role="radiogroup" aria-label="Tipo">
+                            <button v-for="opt in kindOptions" :key="opt.value" type="button" role="radio"
+                                class="kind-picker__opt" :class="{ 'is-active': methodForm.kind === opt.value }"
+                                :aria-checked="methodForm.kind === opt.value" @click="methodForm.kind = opt.value">
+                                <q-icon :name="opt.icon" size="18px" />
+                                <span>{{ opt.label }}</span>
+                            </button>
+                        </div>
+                    </div>
+                    <q-select v-if="methodForm.kind === 'transfer'" class="maia-field" outlined dense emit-value map-options
+                        label="Tarjeta *" :options="accountOptions" v-model="methodForm.account"
+                        :rules="[(v) => !!v || 'Requerido']"
+                        :hint="accountOptions.length ? 'Tarjeta o cuenta a la que entra la transferencia.' : 'No hay tarjetas activas: créelas en la pestaña Tarjetas.'"
+                        hide-bottom-space />
                     <q-select class="maia-field" outlined dense emit-value map-options label="Moneda"
                         :options="currencyOptions" v-model="methodForm.currency" hide-bottom-space />
-                    <q-select class="maia-field" outlined dense emit-value map-options label="Tipo"
-                        :options="kindOptions" v-model="methodForm.kind" hide-bottom-space />
-                    <q-select v-if="methodForm.kind === 'transfer'" class="maia-field" outlined dense emit-value map-options
-                        label="Agrupación *" :options="accountOptions" v-model="methodForm.account"
-                        :rules="[(v) => !!v || 'Requerido']"
-                        hint="Defina agrupaciones en la pestaña Agrupaciones."
-                        hide-bottom-space />
                 </q-card-section>
                 <q-card-actions align="right">
                     <q-btn flat label="Cancelar" v-close-popup />
@@ -147,7 +161,7 @@
         <q-dialog v-model="accountDialog" persistent>
             <q-card class="maia-dialog" style="min-width: 360px; max-width: 440px">
                 <q-card-section class="row items-center">
-                    <div class="text-h6">{{ accountForm.id ? 'Editar agrupación' : 'Nueva agrupación' }}</div>
+                    <div class="text-h6">{{ accountForm.id ? 'Editar tarjeta' : 'Nueva tarjeta' }}</div>
                     <q-space />
                     <q-btn flat round dense icon="close" v-close-popup />
                 </q-card-section>
@@ -198,6 +212,16 @@
 
                         <q-select class="col-12 maia-field" outlined dense multiple use-chips emit-value map-options label="Trabajadores de la feria"
                             :options="workerOptions" v-model="fairForm.worker_ids" />
+
+                        <div class="col-12">
+                            <div class="text-subtitle2 text-grey-8">Inversión</div>
+                            <q-toggle v-model="investmentInherit" label="Usar la forma del negocio" />
+                            <div v-if="investmentInherit" class="text-caption text-grey q-pl-sm">
+                                {{ businessInvestmentLabel }} (pestaña Configurar inversión)
+                            </div>
+                            <InvestmentConfigForm v-else v-model="investmentConfig" :sources="investmentSources" class="q-mt-sm" />
+                        </div>
+
                         <q-input class="col-12 maia-field" outlined dense type="textarea" autogrow label="Notas" v-model="fairForm.notes" />
                     </q-card-section>
                     <q-card-actions align="right">
@@ -266,6 +290,9 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useQuasar } from 'quasar'
 import { api } from 'src/boot/axios'
 import PageHeader from 'src/components/maia/PageHeader.vue'
+import InvestmentConfigForm from 'src/components/maia/InvestmentConfigForm.vue'
+import InvestmentSettingsPanel from 'src/components/maia/InvestmentSettingsPanel.vue'
+import { defaultInvestmentConfig, investmentLabel, normalizeInvestmentConfig } from 'src/assets/js/util/investment'
 import { useAuthStore } from 'src/stores/auth-store'
 import { useFairStore } from 'src/stores/fair-store'
 import { Success } from 'src/assets/js/util/notify'
@@ -275,6 +302,7 @@ const $q = useQuasar()
 const authStore = useAuthStore()
 const fairStore = useFairStore()
 const can = (p) => authStore.hasPermission(p)
+const canInvestment = computed(() => can('inversion.ver') || can('inversion.editar'))
 
 const RATES = [
     { field: 'cost_rate', label: 'Tasa costo' },
@@ -335,8 +363,27 @@ const emptyFair = () => ({
 const fairDialog = ref(false)
 const fairForm = reactive(emptyFair())
 
+const businessInvestment = ref(defaultInvestmentConfig())
+const investmentSources = ref([])
+const investmentInherit = ref(true)
+const investmentConfig = ref(defaultInvestmentConfig())
+const businessInvestmentLabel = computed(() => investmentLabel(businessInvestment.value))
+
+const loadInvestmentSettings = async () => {
+    try {
+        const { data } = await api.get('Settings/Investment')
+        businessInvestment.value = normalizeInvestmentConfig(data.config)
+        investmentSources.value = data.sources || []
+    } catch (error) {
+        investmentSources.value = []
+    }
+}
+
 const openFairDialog = async (row = null) => {
     Object.assign(fairForm, emptyFair())
+    await loadInvestmentSettings()
+    investmentInherit.value = true
+    investmentConfig.value = normalizeInvestmentConfig(businessInvestment.value)
     if (row) {
         try {
             const { data } = await api.get(`Fair/GetById/${row.id}`)
@@ -347,6 +394,10 @@ const openFairDialog = async (row = null) => {
                 worker_ids: (f.workers || []).map((w) => w.id),
                 ...Object.fromEntries(['seller_percent', 'maia_percent', 'fcbc_percent', ...RATES.map((r) => r.field)].map((k) => [k, Number(f[k])])),
             })
+            if (f.investment_config) {
+                investmentInherit.value = false
+                investmentConfig.value = normalizeInvestmentConfig(f.investment_config)
+            }
         } catch (error) {
             notifyApiError(error)
             return
@@ -358,7 +409,7 @@ const openFairDialog = async (row = null) => {
 const saveFair = async () => {
     saving.value = true
     try {
-        const payload = { ...fairForm }
+        const payload = { ...fairForm, investment_config: investmentInherit.value ? null : investmentConfig.value }
         if (!payload.end_date) payload.end_date = null
         if (payload.id) {
             delete payload.create_days
@@ -555,10 +606,10 @@ const saveAccount = async () => {
         }
         if (accountForm.id) {
             await api.put(`TransferAccount/Update/${accountForm.id}`, payload)
-            Success('Agrupación actualizada')
+            Success('Tarjeta actualizada')
         } else {
             await api.post('TransferAccount/Create', payload)
-            Success('Agrupación creada')
+            Success('Tarjeta creada')
         }
         accountDialog.value = false
         await loadAccounts()
@@ -573,7 +624,7 @@ const patchAccount = async (row, changes) => {
     try {
         const { data } = await api.put(`TransferAccount/Update/${row.id}`, changes)
         Object.assign(row, data.data)
-        Success('Agrupación actualizada')
+        Success('Tarjeta actualizada')
     } catch (error) {
         notifyApiError(error)
     }
@@ -581,14 +632,14 @@ const patchAccount = async (row, changes) => {
 
 const removeAccount = (row) => {
     $q.dialog({
-        title: 'Eliminar agrupación',
+        title: 'Eliminar tarjeta',
         message: `¿Desea eliminar "${row.name}"?`,
         cancel: { label: 'Cancelar', flat: true },
         ok: { label: 'Eliminar', unelevated: true, color: 'negative' },
     }).onOk(async () => {
         try {
             await api.delete(`TransferAccount/Delete/${row.id}`)
-            Success('Agrupación eliminada')
+            Success('Tarjeta eliminada')
             await loadAccounts()
         } catch (error) {
             notifyApiError(error)
@@ -602,18 +653,27 @@ const methodDialog = ref(false)
 const savingMethod = ref(false)
 const currencyOptions = ['CUP', 'USD', 'EUR', 'MXN', 'MLC']
 const kindOptions = [
-    { label: 'Efectivo', value: 'cash' },
-    { label: 'Transferencia', value: 'transfer' },
+    { label: 'Efectivo', value: 'cash', icon: 'payments' },
+    { label: 'Transferencia', value: 'transfer', icon: 'account_balance' },
 ]
 const emptyMethod = () => ({ id: null, name: '', currency: 'CUP', kind: 'cash', account: null, state: true })
 const methodForm = reactive(emptyMethod())
+
+// A new method named "Transferencia…" is almost always a transfer.
+watch(() => methodForm.name, (name) => {
+    if (!methodForm.id && methodForm.kind === 'cash' && /transf/i.test(name || '')) methodForm.kind = 'transfer'
+})
+watch(() => methodForm.kind, (kind) => {
+    if (kind === 'cash') methodForm.account = null
+    else if (!methodForm.account && accountOptions.value.length === 1) methodForm.account = accountOptions.value[0].value
+})
 
 const methodColumns = [
     { name: 'code', label: 'Código', field: 'code', align: 'left' },
     { name: 'name', label: 'Nombre', field: 'name', align: 'left' },
     { name: 'currency', label: 'Moneda', field: 'currency', align: 'center' },
     { name: 'kind', label: 'Tipo', field: (r) => (r.kind === 'cash' ? 'Efectivo' : 'Transferencia'), align: 'center' },
-    { name: 'account', label: 'Agrupación', field: (r) => accountNameByCode.value[r.account] || r.account || '—', align: 'center' },
+    { name: 'account', label: 'Tarjeta', field: (r) => accountNameByCode.value[r.account] || r.account || '—', align: 'center' },
     { name: 'state', label: 'Activa', field: 'state', align: 'center' },
     { name: 'action', label: '', field: 'action', align: 'center' },
 ]
@@ -713,3 +773,82 @@ onMounted(async () => {
     }
 })
 </script>
+
+<style lang="scss" scoped>
+.kind-picker__label {
+    font-size: 12px;
+    color: rgba(0, 0, 0, 0.6);
+    margin: 0 0 4px 2px;
+}
+
+.kind-picker {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+    padding: 3px;
+    border: 1px solid rgba(0, 0, 0, 0.24);
+    border-radius: 10px;
+}
+
+.kind-picker__opt {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 0;
+    height: 34px;
+    padding: 0 10px;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    background: transparent;
+    color: rgba(0, 0, 0, 0.62);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+
+    &:hover:not(.is-active) {
+        background: brand-a(wine, 0.06);
+        color: var(--maia-wine);
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--maia-gold-light);
+        outline-offset: 1px;
+    }
+
+    &.is-active {
+        background: brand-a(wine, 0.1);
+        border-color: brand-a(wine, 0.35);
+        color: var(--maia-wine);
+        font-weight: 600;
+    }
+}
+
+body.body--dark {
+    .kind-picker__label {
+        color: rgba(255, 255, 255, 0.6);
+    }
+
+    .kind-picker {
+        border-color: rgba(255, 255, 255, 0.24);
+    }
+
+    .kind-picker__opt {
+        color: rgba(255, 255, 255, 0.65);
+
+        &:hover:not(.is-active) {
+            background: brand-a(gold-light, 0.08);
+            color: var(--maia-gold-light);
+        }
+
+        &.is-active {
+            background: brand-a(gold-light, 0.14);
+            border-color: brand-a(gold-light, 0.45);
+            color: var(--maia-gold-bright);
+        }
+    }
+}
+</style>

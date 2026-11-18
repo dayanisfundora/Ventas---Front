@@ -73,7 +73,27 @@ export const apiErrorMessage = (error) => {
     return data?.error || data?.message || data?.mensajeError || HTTP_MESSAGES[error.response.status] || 'Ocurrió un error inesperado.'
 }
 
-export const notifyApiError = (error) => NotifyError(apiErrorMessage(error))
+/** 404 "not found" when the entity has no fair/day/row yet — not a user-facing error. */
+const isBenignNotFound = (error) => {
+    const status = error?.response?.status
+    if (status !== 404) return false
+    const msg = String(
+        error?.response?.data?.error
+        || error?.response?.data?.message
+        || error?.response?.data?.mensajeError
+        || '',
+    ).toLowerCase()
+    return !msg
+        || msg.includes('registro no encontrado')
+        || msg.includes('no encontrado')
+        || msg.includes('no existe')
+        || msg.includes('not found')
+}
+
+export const notifyApiError = (error) => {
+    if (isBenignNotFound(error)) return
+    NotifyError(apiErrorMessage(error))
+}
 
 /**
  * Downloads a file (Excel/PDF) from an API endpoint using the auth token.
@@ -82,8 +102,15 @@ export const downloadFile = async (endpoint, params = {}, fallbackName = 'report
     try {
         const response = await api.get(endpoint, { params, responseType: 'blob' })
         const disposition = response.headers['content-disposition'] || ''
-        const match = disposition.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i)
-        const name = match ? decodeURIComponent(match[1]) : fallbackName
+        // Prefer RFC 5987 filename* over ASCII filename= (avoids wrong/truncated names).
+        const utf8Match = disposition.match(/filename\*\s*=\s*UTF-8''([^;]+)/i)
+        const plainMatch = disposition.match(/filename\s*=\s*("?)([^";]+)\1/i)
+        let name = fallbackName
+        try {
+            name = decodeURIComponent((utf8Match?.[1] || plainMatch?.[2] || fallbackName).trim().replace(/^["']|["']$/g, ''))
+        } catch {
+            name = (plainMatch?.[2] || fallbackName).trim().replace(/^["']|["']$/g, '')
+        }
         const url = URL.createObjectURL(response.data)
         const link = document.createElement('a')
         link.href = url

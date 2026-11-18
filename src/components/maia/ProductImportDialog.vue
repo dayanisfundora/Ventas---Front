@@ -77,7 +77,7 @@
                             </q-chip>
                         </div>
 
-                        <q-banner v-if="preview.summary.quantity_ignored" dense rounded class="bg-orange-1 text-orange-9 q-mb-sm">
+                        <q-banner v-if="preview.summary.quantity_ignored" dense rounded class="maia-banner--warning q-mb-sm">
                             El archivo trae cantidades, pero no marcó "Cargar cantidades en una feria"; se ignorarán.
                         </q-banner>
                         <q-banner v-if="preview.summary.error" dense rounded class="bg-red-1 text-negative q-mb-sm">

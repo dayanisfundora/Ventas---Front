@@ -30,6 +30,7 @@ export const useFairStore = defineStore('fair', {
             try {
                 const { data } = await api.get('Fair/All')
                 this.fairs = data.data || []
+                // Never keep a fair id that is not in this user's entity list.
                 if (!this.fairs.some((f) => f.id === this.fairId)) {
                     const open = this.fairs.find((f) => f.status === 'open') || this.fairs[0]
                     this.fairId = open?.id || null
@@ -37,6 +38,10 @@ export const useFairStore = defineStore('fair', {
                 }
                 if (this.fairId && !this.days.some((d) => d.id === this.dayId)) {
                     await this.pickCurrentDay()
+                }
+                if (!this.fairs.length) {
+                    this.fairId = null
+                    this.dayId = null
                 }
                 this.persist()
             } finally {

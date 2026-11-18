@@ -1,6 +1,6 @@
 <template>
     <q-page class="maia-page">
-        <PageHeader title="Identidad del negocio" section="Configuración">
+        <PageHeader title="Identidad del negocio" section="Apariencia">
             <q-btn flat no-caps icon="undo" label="Descartar cambios" :disable="!dirty || saving" @click="discard" />
             <q-btn unelevated no-caps color="primary" icon="save" label="Guardar" :loading="saving" :disable="!dirty || !form.name.trim()" @click="save" />
         </PageHeader>

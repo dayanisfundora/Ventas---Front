@@ -10,7 +10,7 @@ import { Notify } from 'quasar'
 // for each client)
 
 const api = axios.create({
-    baseURL: 'http://127.0.0.1:8000/api',
+    baseURL: 'http://127.0.0.1:8001/api',
     headers: {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*'
@@ -44,7 +44,7 @@ export default boot(({ app, router }) => {
         (error) => {
             if (error.response) {
                 // Handle 401 Unauthorized
-                if (error.response.status === 401) {
+                if (error.response.status === 401 && !error.config?.skipAuthRedirect) {
                     localStorage.removeItem('token')
                     delete api.defaults.headers.common['Authorization']
 

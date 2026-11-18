@@ -1,6 +1,6 @@
 <template>
     <q-page class="maia-page">
-        <PageHeader title="Conceptos de gasto" section="Catálogo">
+        <PageHeader title="Conceptos de gasto" section="Configuración">
             <q-input dense outlined debounce="400" v-model="filter" placeholder="Buscar" class="maia-field">
                 <template #prepend><q-icon name="search" /></template>
             </q-input>
@@ -72,7 +72,7 @@ const KINDS = {
     salary: { label: 'Salarios', icon: 'badge', hint: 'Suma automáticamente los salarios de la asistencia diaria.' },
 }
 const authStore = useAuthStore()
-const canEdit = computed(() => authStore.hasPermission('cierre_feria.editar'))
+const canEdit = computed(() => authStore.hasAnyPermission(['conceptos_gasto.crear', 'conceptos_gasto.editar', 'conceptos_gasto.eliminar']))
 
 const { items, filter, loading, saving, pagination, load, onRequest, save, remove } = useCrudTable('ExpenseCategory')
 pagination.value.sortBy = 'sort'

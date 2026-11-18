@@ -11,6 +11,14 @@
 
         <q-tab-panels v-model="tab" animated class="bg-transparent">
             <q-tab-panel name="day" class="q-pa-none">
+                <q-banner v-if="fairStore.isDayClosed" class="maia-card maia-banner--muted q-mb-md" rounded>
+                    <template #avatar><q-icon name="lock" /></template>
+                    Este día está cerrado: no se pueden añadir propinas ni cambiar la asistencia.
+                    Para hacerlo, reabra el día en Cierre del día o elija un día abierto.
+                    <template v-if="can('cierre.reabrir')" #action>
+                        <q-btn flat no-caps color="primary" icon="lock_open" label="Ir a Cierre del día" :to="{ name: 'CierreDia' }" />
+                    </template>
+                </q-banner>
                 <div class="row q-col-gutter-md">
                     <!-- Tips of the day -->
                     <div class="col-12 col-md-7">
@@ -78,9 +86,9 @@
                     <div class="text-subtitle1 text-weight-bold">{{ fairStore.fair?.name }}</div>
                     <q-space />
                     <q-btn v-if="can('reportes.ver')" flat dense no-caps color="primary" icon="table_view" label="Excel"
-                        @click="downloadFile(`Report/Tips/${fairStore.fairId}/Excel`, {}, 'propinas.xlsx')" />
+                        @click="downloadFile(`Report/Tips/${fairStore.fairId}/Excel`, {}, 'propinas_y_salario.xlsx')" />
                     <q-btn v-if="can('reportes.ver')" flat dense no-caps color="primary" icon="picture_as_pdf" label="PDF"
-                        @click="downloadFile(`Report/Tips/${fairStore.fairId}/PDF`, {}, 'propinas.pdf')" />
+                        @click="downloadFile(`Report/Tips/${fairStore.fairId}/PDF`, {}, 'propinas_y_salario.pdf')" />
                 </div>
                 <q-inner-loading :showing="reportLoading" color="primary" />
 
@@ -101,6 +109,42 @@
                                 </q-tr>
                             </template>
                         </q-table>
+                    </q-card>
+
+                    <q-card v-if="report.salary" flat class="maia-card q-mb-md">
+                        <q-card-section class="text-subtitle2 q-pb-none">Salarios de trabajadores por día</q-card-section>
+                        <q-markup-table flat dense class="maia-table" separator="cell">
+                            <thead>
+                                <tr>
+                                    <th class="text-left">Día</th>
+                                    <th v-for="w in report.workers" :key="w.id" class="text-right">{{ w.name }}</th>
+                                    <th class="text-right">Trabajadores</th>
+                                    <th class="text-right">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="r in report.salary.rows" :key="r.fair_day_id">
+                                    <td>{{ weekday(r.date) }} {{ formatDate(r.date) }}</td>
+                                    <td v-for="w in report.workers" :key="w.id" class="text-right">
+                                        <template v-if="r.cells[w.id]?.count">
+                                            {{ r.cells[w.id].amount ? money(r.cells[w.id].amount) : 'x' }}
+                                            <q-tooltip v-if="!r.cells[w.id].amount">Asistió sin salario</q-tooltip>
+                                        </template>
+                                    </td>
+                                    <td class="text-right">{{ r.count || '' }}</td>
+                                    <td class="text-right text-weight-bold">{{ r.amount ? money(r.amount) : '' }}</td>
+                                </tr>
+                                <tr class="total-row">
+                                    <td>Total</td>
+                                    <td v-for="w in report.workers" :key="w.id" class="text-right">
+                                        {{ money(report.salary.totals[w.id]?.amount) }}
+                                        <div class="text-caption">{{ report.salary.totals[w.id]?.count || 0 }} días</div>
+                                    </td>
+                                    <td class="text-right">{{ report.salary.rows.reduce((s, r) => s + r.count, 0) }}</td>
+                                    <td class="text-right">{{ money(report.salary.rows.reduce((s, r) => s + r.amount, 0)) }}</td>
+                                </tr>
+                            </tbody>
+                        </q-markup-table>
                     </q-card>
 
                     <div class="row q-col-gutter-md">
@@ -153,7 +197,7 @@ import FairDaySelector from 'src/components/maia/FairDaySelector.vue'
 import { useAuthStore } from 'src/stores/auth-store'
 import { useFairStore } from 'src/stores/fair-store'
 import { Success } from 'src/assets/js/util/notify'
-import { money, formatDate, notifyApiError, downloadFile } from 'src/assets/js/util/maia'
+import { money, formatDate, weekday, notifyApiError, downloadFile } from 'src/assets/js/util/maia'
 
 const $q = useQuasar()
 const authStore = useAuthStore()
